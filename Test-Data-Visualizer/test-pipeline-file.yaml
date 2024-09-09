@@ -1,0 +1,313 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  This template deploys a testing CodePipeline with its required resources for the Data Visualizer Test environment,
+  including an App Runner service and a VPC connector.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: "Testing"
+  TestGitBranch:
+    Type: String
+    Default: "main"  # Changed from "test" to "main"
+  FullRepositoryId:
+    Type: String
+    Default: "Detectronic/Data-Visualiser"
+  CodeStarConnectionArn:
+    Type: String
+    Default: "arn:aws:codeconnections:eu-west-1:583261726886:connection/7fba6c00-7d2d-4878-8ac6-13f47013dfa7"
+  EcrImageTag:
+    Type: String
+    Default: "latest"
+  TestingRdsCredsSecretArn:
+    Type: String
+    Default: "arn:aws:secretsmanager:eu-west-1:583261726886:secret:DataVisualizer/Rds/Test-RPbAAd"
+  TestingSecretKeySecretArn:
+    Type: String
+    Default: "arn:aws:secretsmanager:eu-west-1:583261726886:secret:DataVisualizer/Secret-Test-iTBotZ"
+  TestingVpcSecurityGroupId:
+    Type: String
+    Default: "sg-0e14d868dfd8294ef"
+  TestingVpcSubnetIdPublic:
+    Type: String
+    Default: "subnet-0e816d94fb9e38d54"  # Public Subnet (eu-west-1a)
+
+Resources:
+  # VPC Connector for App Runner
+  VpcConnector:
+    Type: AWS::AppRunner::VpcConnector
+    Properties: 
+      VpcConnectorName: "DataVisualiserTesting-VpcConnector"
+      Subnets: 
+        - !Ref TestingVpcSubnetIdPublic
+      SecurityGroups: 
+        - !Ref TestingVpcSecurityGroupId
+
+  PipelineArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "datavisualizer-artifacts-${AWS::AccountId}-${AWS::Region}"
+      VersioningConfiguration:
+        Status: Enabled
+      LoggingConfiguration:
+        DestinationBucketName: !Ref PipelineArtifactsLoggingBucket
+        LogFilePrefix: "artifacts-logs"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  PipelineArtifactsLoggingBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "datavisualizer-logging-${AWS::AccountId}-${AWS::Region}"
+      VersioningConfiguration:
+        Status: Enabled
+      AccessControl: LogDeliveryWrite
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location: !Ref PipelineArtifactsBucket
+        Type: S3
+      RoleArn: !GetAtt CodePipelineExecutionRole.Arn
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceCodeRepo
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: "1"
+              Configuration:
+                ConnectionArn: !Ref CodeStarConnectionArn
+                FullRepositoryId: !Ref FullRepositoryId
+                BranchName: !Ref TestGitBranch
+              OutputArtifacts:
+                - Name: SourceCodeAsZip
+        - Name: BuildAndDeploy
+          Actions:
+            - Name: BuildContainerImage
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              InputArtifacts:
+                - Name: SourceCodeAsZip
+              Configuration:
+                ProjectName: !Ref CodeBuildProjectBuild
+            - Name: DeployApp
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: "1"
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                RoleArn: !GetAtt PipelineStackCloudFormationExecutionRole.Arn
+                StackName: !Ref AWS::StackName
+                TemplatePath: SourceCodeAsZip::test-codepipeline.yaml
+                Capabilities: CAPABILITY_NAMED_IAM
+
+  CodePipelineExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: "sts:AssumeRole"
+            Principal:
+              Service: codepipeline.amazonaws.com
+      Policies:
+        - PolicyName: CodePipelineAccess
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action: "iam:PassRole"
+                Resource: "*"
+        - PolicyName: CodeStarConnectionAccess
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action: "codestar-connections:UseConnection"
+                Resource: !Ref CodeStarConnectionArn
+        - PolicyName: CodePipelineCodeAndS3Bucket
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:GetBucketAcl"
+                  - "s3:GetBucketLocation"
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:PutObject"
+                Resource: !Sub "${PipelineArtifactsBucket.Arn}/*"
+
+  CodeBuildProjectBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:4.0
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Source:
+        Type: CODEPIPELINE
+      TimeoutInMinutes: 60
+      Description: "Build project for container image"
+
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: "sts:AssumeRole"
+            Principal:
+              Service: codebuild.amazonaws.com
+      Policies:
+        - PolicyName: CodeBuildECR
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ecr:BatchCheckLayerAvailability"
+                  - "ecr:CompleteLayerUpload"
+                  - "ecr:GetAuthorizationToken"
+                  - "ecr:InitiateLayerUpload"
+                  - "ecr:PutImage"
+                  - "ecr:UploadLayerPart"
+                Resource: "*"
+        - PolicyName: CodeBuildLogs
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*"
+
+  PipelineStackCloudFormationExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: "sts:AssumeRole"
+            Principal:
+              Service: cloudformation.amazonaws.com
+      Policies:
+        - PolicyName: CloudFormationPipelineRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "cloudformation:DescribeChangeSet"
+                  - "cloudformation:DescribeStackResources"
+                  - "cloudformation:DescribeStackResource"
+                  - "cloudformation:DescribeStacks"
+                  - "cloudformation:GetTemplate"
+                  - "cloudformation:ListStackResources"
+                  - "cloudformation:ListStacks"
+                  - "cloudformation:ListStackResources"
+                  - "cloudformation:UpdateStack"
+                  - "cloudformation:CreateStack"
+                  - "cloudformation:DeleteStack"
+                  - "cloudformation:CreateChangeSet"
+                  - "cloudformation:ExecuteChangeSet"
+                Resource: "*"
+        - PolicyName: S3AccessForPipeline
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                  - "s3:DeleteObject"
+                Resource: !Sub "${PipelineArtifactsBucket.Arn}/*"
+        - PolicyName: IAMPassRoleAccess
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action: "iam:PassRole"
+                Resource: "*"
+
+  AppRunnerService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: "DataVisualiserTesting-AppRunnerService"
+      InstanceConfiguration:
+        InstanceRoleArn: !GetAtt AppRunnerServiceRole.Arn
+      NetworkConfiguration:
+        EgressConfiguration:
+          EgressType: VPC
+          VpcConnectorArn: !Ref VpcConnector
+        IngressConfiguration:
+          IsPubliclyAccessible: true
+      SourceConfiguration:
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt AppRunnerServiceRole.Arn
+        AutoDeploymentsEnabled: true
+        ImageRepository:
+          ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/datavisualizer:${EcrImageTag}"
+          ImageRepositoryType: ECR
+          ImageConfiguration:
+            Port: 8080
+            RuntimeEnvironmentVariables:
+              - Name: PORT
+                Value: '8080'
+              - Name: AWS_REGION
+                Value: eu-west-1
+            RuntimeEnvironmentSecrets:
+              - Name: RDS_CREDS_JSON
+                Value: !Ref TestingRdsCredsSecretArn
+              - Name: SECRET_KEY
+                Value: !Ref TestingSecretKeySecretArn
+
+  AppRunnerServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: "sts:AssumeRole"
+            Principal:
+              Service: apprunner.amazonaws.com
+      Policies:
+        - PolicyName: AppRunnerServicePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ecr:GetDownloadUrlForLayer"
+                  - "ecr:BatchGetImage"
+                  - "ecr:BatchCheckLayerAvailability"
+                  - "ecr:GetAuthorizationToken"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+
+Outputs:
+  PipelineId:
+    Description: "The ID of the CodePipeline."
+    Value: !Ref Pipeline
+  AppRunnerServiceUrl:
+    Description: "URL of the App Runner service."
+    Value: !GetAtt AppRunnerService.ServiceUrl
