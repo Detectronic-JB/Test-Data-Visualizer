@@ -47,10 +47,6 @@ Parameters:
     Type: String
     Default: "arn:aws:secretsmanager:eu-west-1:583261726886:secret:DataVisualizer/Secret-Test-iTBotZ"
 
-  AppRunnerRoleArn:  # New parameter for the existing App Runner role
-    Type: String
-    Default: "arn:aws:iam::583261726886:role/DataVisualizerTest-AppRunnerRole"
-
 Resources:
   # ECR Repository for storing application images
   ECRRepository:
@@ -164,7 +160,7 @@ Resources:
         Type: CODEPIPELINE
       ServiceRole: !GetAtt CodeBuildServiceRole.Arn
       Description: "CodeBuild project for building and pushing Docker images to ECR"
-      BuildSpec: !Sub |
+      BuildSpec: |
         version: 0.2
         phases:
           pre_build:
@@ -187,7 +183,7 @@ Resources:
           files:
             - '**/*'
 
-  CodeBuildProjectPrepareCloudFormation:  # Adding missing CodeBuild project for CloudFormation preparation
+  CodeBuildProjectPrepareCloudFormation:
     Type: AWS::CodeBuild::Project
     Properties:
       Name: "DataVisualizerTest-PrepareCloudFormation"
@@ -201,7 +197,7 @@ Resources:
         Type: CODEPIPELINE
       ServiceRole: !GetAtt CodeBuildServiceRole.Arn
       Description: "CodeBuild project for preparing CloudFormation templates"
-      BuildSpec: !Sub |
+      BuildSpec: |
         version: 0.2
         phases:
           build:
