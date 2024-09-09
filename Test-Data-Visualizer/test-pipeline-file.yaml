@@ -12,7 +12,7 @@ Parameters:
     Default: "main"
   FullRepositoryId:
     Type: String
-    Default: "Detectronic-JB/Test-Data-Visualizer"
+    Default: "Detectronic-JB/test-data-visualizer"
   CodeStarConnectionArn:
     Type: String
     Default: "arn:aws:codeconnections:eu-west-1:583261726886:connection/7fba6c00-7d2d-4878-8ac6-13f47013dfa7"
@@ -304,7 +304,7 @@ Resources:
   AppRunnerService:
     Type: AWS::AppRunner::Service
     Properties:
-      ServiceName: "DataVisualizerAppRunnerService"
+      ServiceName: "datavisualizer-apprunner-service"
       SourceConfiguration:
         ImageRepository:
           ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/datavisualizer:${EcrImageTag}"
