@@ -69,7 +69,7 @@ Resources:
       VpcId: !Ref TestVpc
       CidrBlock: "172.31.0.0/20"
       MapPublicIpOnLaunch: true
-      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      AvailabilityZone: !Select [0, !GetAZs '']
       Tags:
         - Key: Name
           Value: Test-Public-Subnet
@@ -80,7 +80,7 @@ Resources:
     Properties:
       VpcId: !Ref TestVpc
       CidrBlock: "172.31.16.0/20"
-      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      AvailabilityZone: !Select [0, !GetAZs '']
       Tags:
         - Key: Name
           Value: Test-Private-Subnet-1
@@ -91,7 +91,7 @@ Resources:
     Properties:
       VpcId: !Ref TestVpc
       CidrBlock: "172.31.32.0/20"
-      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      AvailabilityZone: !Select [1, !GetAZs '']
       Tags:
         - Key: Name
           Value: Test-Private-Subnet-2
@@ -212,7 +212,7 @@ Resources:
         - Key: Name
           Value: Test-AppRunner-Service
 
-  # IAM Role for App Runner
+  # IAM Role for App Runner and CodeBuild
   TestAppRunnerAccessRole:
     Type: AWS::IAM::Role
     Properties:
@@ -242,7 +242,7 @@ Resources:
                 Resource: '*'
       Tags:
         - Key: Name
-        Value: 'Test-AppRunner-Role'
+          Value: 'Test-AppRunner-Role'
 
   # S3 Bucket for Pipeline Artifacts
   TestPipelineArtifactsBucket:
