@@ -12,10 +12,10 @@ Parameters:
     Default: "main"
   FullRepositoryId:
     Type: String
-    Default: "Detectronic-JB/test-data-visualizer"
+    Default: "Detectronic-JB/Test-Data-Visualizer"
   CodeStarConnectionArn:
     Type: String
-    Default: "arn:aws:codeconnections:eu-west-1:583261726886:connection/7fba6c00-7d2d-4878-8ac6-13f47013dfa7"
+    Default: "arn:aws:codestar-connections:eu-west-1:583261726886:connection/7fba6c00-7d2d-4878-8ac6-13f47013dfa7"
   EcrImageTag:
     Type: String
     Default: "latest"
@@ -33,13 +33,13 @@ Parameters:
     Default: "sg-0e14d868dfd8294ef"
   TestingVpcSubnetId1:
     Type: String
-    Default: "subnet-00c4efa393215aa"  # Private Subnet 1
+    Default: "subnet-00c4efa393215aa"
   TestingVpcSubnetId2:
     Type: String
-    Default: "subnet-083d121cdc5bc5e0c"  # Private Subnet 2
+    Default: "subnet-083d121cdc5bc5e0c"
   TestingVpcSubnetId3:
     Type: String
-    Default: "subnet-0e816d94fb9e38d54"  # Public Subnet
+    Default: "subnet-0e816d94fb9e38d54"
 
 Resources:
   Pipeline:
@@ -140,7 +140,7 @@ Resources:
   PipelineArtifactsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: "datavisualizer-pipeline-artifacts-583261726886"
+      BucketName: "datavisualizer-test-pipeline-artifacts"
       VersioningConfiguration:
         Status: Enabled
       LoggingConfiguration:
@@ -154,7 +154,7 @@ Resources:
   PipelineArtifactsLoggingBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: "datavisualizer-logging-583261726886"
+      BucketName: "datavisualizer-test-pipeline-logging"
       VersioningConfiguration:
         Status: Enabled
       AccessControl: LogDeliveryWrite
@@ -317,7 +317,7 @@ Resources:
       Tags:
         - Key: "Environment"
           Value: "Test"
-        
+
   AppRunnerServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -337,6 +337,11 @@ Resources:
                   - "ecr:GetDownloadUrlForLayer"
                   - "ecr:BatchGetImage"
                   - "ecr:BatchCheckLayerAvailability"
+                  - "ecr:ListImages"
+                  - "ecr:DescribeImages"
+                Resource: "*"
+              - Effect: Allow
+                Action: "ecr:GetAuthorizationToken"
                 Resource: "*"
 
 Outputs:
