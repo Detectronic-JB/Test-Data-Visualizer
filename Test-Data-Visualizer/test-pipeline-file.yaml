@@ -13,7 +13,7 @@ Parameters:
   
   FullRepositoryId:
     Type: String
-    Default: "detectronic/data-visualiser"  # Updated to use lowercase and correct format
+    Default: "my-app-repo"  # Updated to create a new ECR repository
 
   CodeStarConnectionArn:
     Type: String
@@ -48,6 +48,14 @@ Parameters:
     Default: "arn:aws:secretsmanager:eu-west-1:583261726886:secret:DataVisualizer/Secret-Test-iTBotZ"
 
 Resources:
+  # ECR Repository for storing application images
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref FullRepositoryId
+      ImageScanningConfiguration:
+        scanOnPush: true
+
   PipelineArtifactsBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -126,37 +134,55 @@ Resources:
                   - "ecr:BatchGetImage"
                   - "ecr:GetAuthorizationToken"
                 Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "ecr:PutImage"
+                  - "ecr:CompleteLayerUpload"
+                  - "ecr:UploadLayerPart"
+                  - "ecr:InitiateLayerUpload"
+                Resource: "*"
 
-  CodeBuildProjectPrepareCloudFormation:
+  CodeBuildProjectBuildAndPush:
     Type: AWS::CodeBuild::Project
-    Properties: 
-      Name: "DataVisualizerTest-CodeBuildPrepareCloudFormation"
-      Artifacts: 
+    Properties:
+      Name: "DataVisualizerTest-CodeBuildBuildAndPush"
+      Artifacts:
         Type: CODEPIPELINE
-      Environment: 
+      Environment:
         ComputeType: BUILD_GENERAL1_SMALL
         Image: aws/codebuild/standard:5.0
         Type: LINUX_CONTAINER
-      Source: 
+        PrivilegedMode: true  # Required for Docker build
+        EnvironmentVariables:
+          - Name: REPOSITORY_URI
+            Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}"
+      Source:
         Type: CODEPIPELINE
       ServiceRole: !GetAtt CodeBuildServiceRole.Arn
-      Description: "CodeBuild project for preparing CloudFormation templates"
-
-  CodeBuildProjectBuild:
-    Type: AWS::CodeBuild::Project
-    Properties: 
-      Name: "DataVisualizerTest-CodeBuildBuild"
-      Artifacts: 
-        Type: CODEPIPELINE
-      Environment: 
-        ComputeType: BUILD_GENERAL1_SMALL
-        Image: aws/codebuild/standard:5.0
-        Type: LINUX_CONTAINER
-      Source: 
-        Type: CODEPIPELINE
-      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
-      Description: "CodeBuild project for building container image"
-
+      Description: "CodeBuild project for building and pushing Docker images to ECR"
+      BuildSpec: |
+        version: 0.2
+        phases:
+          pre_build:
+            commands:
+              - echo Logging in to Amazon ECR...
+              - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
+          build:
+            commands:
+              - echo Build started on `date`
+              - echo Building the Docker image...
+              - docker build -t $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION .
+              - docker tag $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION $REPOSITORY_URI:latest
+          post_build:
+            commands:
+              - echo Pushing the Docker image...
+              - docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
+              - docker push $REPOSITORY_URI:latest
+              - echo Build completed on `date`
+        artifacts:
+          files:
+            - '**/*'
+  
   AppRunnerServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -251,7 +277,7 @@ Resources:
               InputArtifacts:
                 - Name: SourceCodeAsZip
               Configuration:
-                ProjectName: !Ref CodeBuildProjectBuild
+                ProjectName: !Ref CodeBuildProjectBuildAndPush
               RunOrder: 1
             - Name: PrepareCloudFormation
               ActionTypeId:
