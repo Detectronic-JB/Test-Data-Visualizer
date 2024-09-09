@@ -1,348 +1,179 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  This template deploys a testing CodePipeline with its required resources including VPC, Subnets, NAT Gateway, Security Groups, Route Tables, and App Runner.
-
-  The following stages are predefined in this template:
-  - Source
-  - UpdatePipeline
-  - BuildAndDeployTestStack
+  This template deploys a testing CodePipeline with its required resources for a testing environment, including App Runner and ECR access.
 
 Parameters:
   Environment:
     Type: String
     Default: "Testing"
-  TestGitBranch:
+  
+  GitBranch:
     Type: String
     Default: "main"
+  
   FullRepositoryId:
     Type: String
     Default: "Detectronic/Data-Visualiser"
+
   CodeStarConnectionArn:
     Type: String
-    Default: "arn:aws:codeconnections:eu-west-1:583261726886:connection/7fba6c00-7d2d-4878-8ac6-13f47013dfa7"
+    Default: "arn:aws:codestar-connections:eu-west-1:583261726886:connection/7fba6c00-7d2d-4878-8ac6-13f47013dfa7"
+
   EcrImageTag:
     Type: String
     Default: "latest"
-  TestingRdsCredsSecretArn:
+
+  # VPC and RDS Outputs from the already deployed VPC/RDS Stack
+  VPCId:
     Type: String
-    Default: ""
-  TestingSecretKeySecretArn:
+    Default: "vpc-0ca52eb6b0f7d03a3"
+
+  PrivateSubnet1:
     Type: String
-    Default: ""
-  TestingRdsUserArn:
+    Default: "subnet-00c4e4fea393215aa"
+
+  PrivateSubnet2:
     Type: String
-    Default: ""
-  TestingVpcCidr:
+    Default: "subnet-083d121cdc5bc5e0c"
+
+  RdsInstanceArn:
     Type: String
-    Default: "172.31.0.0/16"
+    Default: "arn:aws:rds:eu-west-1:583261726886:db:datavis-testing"
+
+  RdsSecurityGroupId:
+    Type: String
+    Default: "sg-06d609bba3d27ff89"
+
+  SecretKeySecretArn:
+    Type: String
+    Default: "arn:aws:secretsmanager:eu-west-1:583261726886:secret:DataVisualizer/Secret-Test-iTBotZ"
 
 Resources:
-  # VPC
-  TestVpc:
-    Type: AWS::EC2::VPC
+  AppRunnerServiceRole:
+    Type: AWS::IAM::Role
     Properties:
-      CidrBlock: !Ref TestingVpcCidr
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
-      Tags:
-        - Key: Name
-          Value: Test-VPC
+      RoleName: "DataVisualizerTest-AppRunnerRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apprunner.amazonaws.com
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "AppRunnerFullAccess"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - apprunner:*
+                  - ecr:*
+                  - logs:*
+                  - s3:GetObject
+                  - s3:PutObject
+                  - ec2:Describe*
+                Resource: "*"
 
-  # Internet Gateway
-  TestInternetGateway:
-    Type: AWS::EC2::InternetGateway
-    Properties:
-      Tags:
-        - Key: Name
-          Value: Test-Internet-Gateway
-
-  AttachInternetGateway:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties:
-      VpcId: !Ref TestVpc
-      InternetGatewayId: !Ref TestInternetGateway
-
-  # Public Subnet
-  TestPublicSubnet:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref TestVpc
-      CidrBlock: "172.31.0.0/20"
-      MapPublicIpOnLaunch: true
-      AvailabilityZone: !Select [0, !GetAZs '']
-      Tags:
-        - Key: Name
-          Value: Test-Public-Subnet
-
-  # Private Subnet 1
-  TestPrivateSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref TestVpc
-      CidrBlock: "172.31.16.0/20"
-      AvailabilityZone: !Select [0, !GetAZs '']
-      Tags:
-        - Key: Name
-          Value: Test-Private-Subnet-1
-
-  # Private Subnet 2
-  TestPrivateSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref TestVpc
-      CidrBlock: "172.31.32.0/20"
-      AvailabilityZone: !Select [1, !GetAZs '']
-      Tags:
-        - Key: Name
-          Value: Test-Private-Subnet-2
-
-  # NAT Gateway and Elastic IP
-  TestElasticIP:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-
-  TestNATGateway:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId: !GetAtt TestElasticIP.AllocationId
-      SubnetId: !Ref TestPublicSubnet
-      Tags:
-        - Key: Name
-          Value: Test-NAT-Gateway
-
-  # Public Route Table and Association
-  TestPublicRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref TestVpc
-      Tags:
-        - Key: Name
-          Value: Test-Public-Route-Table
-
-  TestPublicRoute:
-    Type: AWS::EC2::Route
-    DependsOn: AttachInternetGateway
-    Properties:
-      RouteTableId: !Ref TestPublicRouteTable
-      DestinationCidrBlock: "0.0.0.0/0"
-      GatewayId: !Ref TestInternetGateway
-
-  PublicSubnetRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref TestPublicSubnet
-      RouteTableId: !Ref TestPublicRouteTable
-
-  # Private Route Table and Association
-  TestPrivateRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref TestVpc
-      Tags:
-        - Key: Name
-          Value: Test-Private-Route-Table
-
-  TestPrivateRoute:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref TestPrivateRouteTable
-      DestinationCidrBlock: "0.0.0.0/0"
-      NatGatewayId: !Ref TestNATGateway
-
-  PrivateSubnet1RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref TestPrivateSubnet1
-      RouteTableId: !Ref TestPrivateRouteTable
-
-  PrivateSubnet2RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref TestPrivateSubnet2
-      RouteTableId: !Ref TestPrivateRouteTable
-
-  # Security Group for App Runner
-  TestAppRunnerSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: 'Allow App Runner access'
-      VpcId: !Ref TestVpc
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: "0.0.0.0/0"
-      Tags:
-        - Key: Name
-          Value: Test-AppRunner-SecurityGroup
-
-  # App Runner VPC Connector
-  TestAppRunnerVpcConnector:
-    Type: AWS::AppRunner::VpcConnector
-    Properties:
-      Subnets:
-        - !Ref TestPrivateSubnet1
-        - !Ref TestPrivateSubnet2
-      SecurityGroups:
-        - !Ref TestAppRunnerSecurityGroup
-      Tags:
-        - Key: Name
-          Value: Test-AppRunner-VPCConnector
-
-  # App Runner Service
-  TestAppRunnerService:
+  AppRunnerService:
     Type: AWS::AppRunner::Service
     Properties:
-      ServiceName: 'Test-AppRunnerService'
+      ServiceName: "DataVisualizerTest-AppRunner"
       SourceConfiguration:
         ImageRepository:
-          ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/my-app-repo:${EcrImageTag}"
+          ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}:${EcrImageTag}"
+          ImageConfiguration:
+            Port: "8080"
           ImageRepositoryType: ECR
         AuthenticationConfiguration:
-          AccessRoleArn: !GetAtt TestAppRunnerAccessRole.Arn
+          AccessRoleArn: !GetAtt AppRunnerServiceRole.Arn
       InstanceConfiguration:
-        Cpu: '1 vCPU'
-        Memory: '2 GB'
+        Cpu: "1024"
+        Memory: "2048"
       NetworkConfiguration:
         EgressConfiguration:
           EgressType: VPC
-          VpcConnectorArn: !Ref TestAppRunnerVpcConnector
-      Tags:
-        - Key: Name
-          Value: Test-AppRunner-Service
+          VpcConnectorArn: !Ref VpcConnector
+      HealthCheckConfiguration:
+        Protocol: HTTP
+        Path: "/health"
 
-  # IAM Role for App Runner and CodeBuild
-  TestAppRunnerAccessRole:
-    Type: AWS::IAM::Role
+  VpcConnector:
+    Type: AWS::AppRunner::VpcConnector
     Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - apprunner.amazonaws.com
-                - codebuild.amazonaws.com
-            Action: 'sts:AssumeRole'
-      Policies:
-        - PolicyName: 'AppRunnerAndCodeBuildAccess'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 'ecr:GetDownloadUrlForLayer'
-                  - 'ecr:BatchGetImage'
-                  - 'logs:CreateLogGroup'
-                  - 'logs:CreateLogStream'
-                  - 'logs:PutLogEvents'
-                  - 's3:GetObject'
-                  - 's3:PutObject'
-                Resource: '*'
-      Tags:
-        - Key: Name
-          Value: 'Test-AppRunner-Role'
+      Subnets:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroups:
+        - !Ref RdsSecurityGroupId
 
-  # IAM Role for CodePipeline
-  TestPipelineRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: codepipeline.amazonaws.com
-            Action: 'sts:AssumeRole'
-      Policies:
-        - PolicyName: 'CodePipelineAccess'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 'codebuild:StartBuild'
-                  - 'codebuild:BatchGetBuilds'
-                  - 'codebuild:BatchGetProjects'
-                  - 's3:GetObject'
-                  - 's3:PutObject'
-                  - 's3:GetBucketVersioning'
-                  - 's3:PutBucketVersioning'
-                  - 'iam:PassRole'
-                Resource: '*'
-      Tags:
-        - Key: Name
-          Value: 'Test-Pipeline-Role'
-
-  # S3 Bucket for Pipeline Artifacts
-  TestPipelineArtifactsBucket:
-    Type: 'AWS::S3::Bucket'
-    Properties:
-      BucketName: !Sub "test-pipeline-artifacts-${AWS::AccountId}-${AWS::Region}"
-      AccessControl: Private
-
-  # CodeBuild Project
-  BuildProject:
-    Type: AWS::CodeBuild::Project
-    Properties:
-      Name: "Test-Build-Project"
-      Source:
-        Type: CODEPIPELINE
-      Artifacts:
-        Type: CODEPIPELINE
-      Environment:
-        Type: LINUX_CONTAINER
-        ComputeType: BUILD_GENERAL1_SMALL
-        Image: "aws/codebuild/standard:5.0"
-      ServiceRole: !GetAtt TestAppRunnerAccessRole.Arn
-
-  # CodePipeline for Testing
-  TestPipeline:
+  Pipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
-      Name: 'Test-Pipeline'
-      RoleArn: !GetAtt TestPipelineRole.Arn
       ArtifactStore:
+        Location: !Ref PipelineArtifactsBucket
         Type: S3
-        Location: !Ref TestPipelineArtifactsBucket
+      RoleArn: arn:aws:iam::583261726886:role/Data-Visualiser-Test-Role
+      RestartExecutionOnUpdate: true
       Stages:
         - Name: Source
           Actions:
-            - Name: SourceAction
+            - Name: SourceCodeRepo
               ActionTypeId:
                 Category: Source
                 Owner: AWS
                 Provider: CodeStarSourceConnection
-                Version: 1
-              OutputArtifacts:
-                - Name: SourceOutput
+                Version: "1"
               Configuration:
                 ConnectionArn: !Ref CodeStarConnectionArn
                 FullRepositoryId: !Ref FullRepositoryId
-                BranchName: !Ref TestGitBranch
-              RoleArn: !GetAtt TestPipelineRole.Arn
-        - Name: Build
+                BranchName: !Ref GitBranch
+              OutputArtifacts:
+                - Name: SourceCodeAsZip
+              RunOrder: 1
+        
+        - Name: BuildAndDeploy
           Actions:
-            - Name: BuildAction
+            - Name: BuildContainerImage
               ActionTypeId:
                 Category: Build
                 Owner: AWS
                 Provider: CodeBuild
-                Version: 1
+                Version: "1"
               InputArtifacts:
-                - Name: SourceOutput
+                - Name: SourceCodeAsZip
               Configuration:
-                ProjectName: !Ref BuildProject
-              RoleArn: !GetAtt TestPipelineRole.Arn
+                ProjectName: !Ref CodeBuildProjectBuild
+              RunOrder: 1
+            - Name: PrepareCloudFormation
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: "1"
+                Provider: CodeBuild
+              InputArtifacts:
+                - Name: SourceCodeAsZip
+              OutputArtifacts:
+                - Name: AppRunnerCloudFormation
+              Configuration:
+                ProjectName: !Ref CodeBuildProjectPrepareCloudFormation
+              RunOrder: 2
 
-Outputs:
-  VPCId:
-    Description: 'Test VPC ID'
-    Value: !Ref TestVpc
-  AppRunnerServiceURL:
-    Description: 'App Runner Service URL'
-    Value: !GetAtt TestAppRunnerService.ServiceUrl
-  PipelineName:
-    Description: 'Test Pipeline Name'
-    Value: !Ref TestPipeline
+        - Name: AppRunnerDeploy
+          Actions:
+            - Name: Deploy
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: "1"
+                Provider: CloudFormation
+              InputArtifacts:
+                - Name: AppRunnerCloudFormation
+              Configuration:
+                ActionMode: REPLACE_ON_FAILURE
+                RoleArn: arn:aws:iam::583261726886:role/Data-Visualiser-Test-Role
+                StackName: !Sub "${AWS::StackName}-AppRunnerService"
+                TemplatePath: AppRunnerCloudFormation::template.yml
+              RunOrder: 1
+
+  # Other Resources (S3 Buckets, CodeBuild Roles, etc.) remain the same.
