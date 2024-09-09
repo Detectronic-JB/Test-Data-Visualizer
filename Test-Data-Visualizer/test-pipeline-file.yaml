@@ -1,195 +1,233 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: Detectronic Test Visualizer CloudFormation template including VPC, Subnets, NAT Gateway, App Runner Service, Security Group, and Testing Pipeline
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  This template deploys a testing CodePipeline with its required resources including VPC, Subnets, NAT Gateway, Security Groups, Route Tables, and App Runner.
+
+  The following stages are predefined in this template:
+  - Source
+  - UpdatePipeline
+  - BuildAndDeployTestStack
 
 Parameters:
+  Environment:
+    Type: String
+    Default: "Testing"
+  TestGitBranch:
+    Type: String
+    Default: "main"
+  FullRepositoryId:
+    Type: String
+    Default: "Detectronic/Data-Visualiser"
+
   CodeStarConnectionArn:
     Type: String
-    Description: ARN for the CodeStar Connection to GitHub
-    Default: arn:aws:codestar-connections:eu-west-1:583261726886:connection/7fba6c00-7d2d-4878-8ac6-13f47013dfa7
+    Default: ""
   EcrImageTag:
     Type: String
-    Description: ECR Image Tag to deploy from
-    Default: latest
+    Default: "latest"
+  TestingRdsCredsSecretArn:
+    Type: String
+    Default: ""
+  TestingSecretKeySecretArn:
+    Type: String
+    Default: ""
+  TestingRdsUserArn:
+    Type: String
+    Default: ""
+  TestingVpcCidr:
+    Type: String
+    Default: "172.31.0.0/16"
+  TestingVpcSecurityGroupId:
+    Type: String
+    Default: ""
+  TestingVpcSubnetId1:
+    Type: String
+    Default: ""
+  TestingVpcSubnetId2:
+    Type: String
+    Default: ""
+  TestingVpcSubnetId3:
+    Type: String
+    Default: ""
 
 Resources:
-  # VPC for Detectronic Test Visualizer
-  TestVisualizerVPC:
-    Type: 'AWS::EC2::VPC'
+  # VPC
+  TestVpc:
+    Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: '172.31.0.0/16'
+      CidrBlock: !Ref TestingVpcCidr
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: 'Detectronic-Test-Visualizer-VPC'
+          Value: Test-VPC
 
-  # Internet Gateway for VPC
-  TestVisualizerInternetGateway:
-    Type: 'AWS::EC2::InternetGateway'
+  # Internet Gateway
+  TestInternetGateway:
+    Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
         - Key: Name
-          Value: 'Detectronic-Test-Visualizer-InternetGateway'
+          Value: Test-Internet-Gateway
 
   AttachInternetGateway:
-    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Type: AWS::EC2::VPCGatewayAttachment
     Properties:
-      VpcId: !Ref TestVisualizerVPC
-      InternetGatewayId: !Ref TestVisualizerInternetGateway
+      VpcId: !Ref TestVpc
+      InternetGatewayId: !Ref TestInternetGateway
 
-  # Public Subnet for VPC
-  TestVisualizerPublicSubnet:
-    Type: 'AWS::EC2::Subnet'
+  # Public Subnet
+  TestPublicSubnet:
+    Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref TestVisualizerVPC
-      CidrBlock: '172.31.0.0/20'
+      VpcId: !Ref TestVpc
+      CidrBlock: "172.31.0.0/20"
       MapPublicIpOnLaunch: true
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
       Tags:
         - Key: Name
-          Value: 'Detectronic-Test-Visualizer-Public-Subnet'
+          Value: Test-Public-Subnet
 
   # Private Subnet 1
-  TestVisualizerPrivateSubnet1:
-    Type: 'AWS::EC2::Subnet'
+  TestPrivateSubnet1:
+    Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref TestVisualizerVPC
-      CidrBlock: '172.31.16.0/20'
+      VpcId: !Ref TestVpc
+      CidrBlock: "172.31.16.0/20"
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
       Tags:
         - Key: Name
-          Value: 'Detectronic-Test-Visualizer-Private-Subnet-1'
+          Value: Test-Private-Subnet-1
 
   # Private Subnet 2
-  TestVisualizerPrivateSubnet2:
-    Type: 'AWS::EC2::Subnet'
+  TestPrivateSubnet2:
+    Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref TestVisualizerVPC
-      CidrBlock: '172.31.32.0/20'
+      VpcId: !Ref TestVpc
+      CidrBlock: "172.31.32.0/20"
       AvailabilityZone: !Select [ 1, !GetAZs '' ]
       Tags:
         - Key: Name
-          Value: 'Detectronic-Test-Visualizer-Private-Subnet-2'
+          Value: Test-Private-Subnet-2
 
   # NAT Gateway and Elastic IP
-  TestVisualizerElasticIP:
-    Type: 'AWS::EC2::EIP'
+  TestElasticIP:
+    Type: AWS::EC2::EIP
     Properties:
       Domain: vpc
 
-  TestVisualizerNATGateway:
-    Type: 'AWS::EC2::NatGateway'
+  TestNATGateway:
+    Type: AWS::EC2::NatGateway
     Properties:
-      AllocationId: !GetAtt TestVisualizerElasticIP.AllocationId
-      SubnetId: !Ref TestVisualizerPublicSubnet
+      AllocationId: !GetAtt TestElasticIP.AllocationId
+      SubnetId: !Ref TestPublicSubnet
       Tags:
         - Key: Name
-          Value: 'Detectronic-Test-Visualizer-NATGateway'
+          Value: Test-NAT-Gateway
 
   # Public Route Table and Association
-  TestVisualizerPublicRouteTable:
-    Type: 'AWS::EC2::RouteTable'
+  TestPublicRouteTable:
+    Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref TestVisualizerVPC
+      VpcId: !Ref TestVpc
       Tags:
         - Key: Name
-          Value: 'Detectronic-Test-Visualizer-Public-Route-Table'
+          Value: Test-Public-Route-Table
 
-  TestVisualizerPublicRoute:
-    Type: 'AWS::EC2::Route'
+  TestPublicRoute:
+    Type: AWS::EC2::Route
     DependsOn: AttachInternetGateway
     Properties:
-      RouteTableId: !Ref TestVisualizerPublicRouteTable
-      DestinationCidrBlock: '0.0.0.0/0'
-      GatewayId: !Ref TestVisualizerInternetGateway
+      RouteTableId: !Ref TestPublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref TestInternetGateway
 
   PublicSubnetRouteTableAssociation:
-    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref TestVisualizerPublicSubnet
-      RouteTableId: !Ref TestVisualizerPublicRouteTable
+      SubnetId: !Ref TestPublicSubnet
+      RouteTableId: !Ref TestPublicRouteTable
 
   # Private Route Table and Association
-  TestVisualizerPrivateRouteTable:
-    Type: 'AWS::EC2::RouteTable'
+  TestPrivateRouteTable:
+    Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref TestVisualizerVPC
+      VpcId: !Ref TestVpc
       Tags:
         - Key: Name
-          Value: 'Detectronic-Test-Visualizer-Private-Route-Table'
+          Value: Test-Private-Route-Table
 
-  TestVisualizerPrivateRoute:
-    Type: 'AWS::EC2::Route'
+  TestPrivateRoute:
+    Type: AWS::EC2::Route
     Properties:
-      RouteTableId: !Ref TestVisualizerPrivateRouteTable
-      DestinationCidrBlock: '0.0.0.0/0'
-      NatGatewayId: !Ref TestVisualizerNATGateway
+      RouteTableId: !Ref TestPrivateRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref TestNATGateway
 
   PrivateSubnet1RouteTableAssociation:
-    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref TestVisualizerPrivateSubnet1
-      RouteTableId: !Ref TestVisualizerPrivateRouteTable
+      SubnetId: !Ref TestPrivateSubnet1
+      RouteTableId: !Ref TestPrivateRouteTable
 
   PrivateSubnet2RouteTableAssociation:
-    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref TestVisualizerPrivateSubnet2
-      RouteTableId: !Ref TestVisualizerPrivateRouteTable
+      SubnetId: !Ref TestPrivateSubnet2
+      RouteTableId: !Ref TestPrivateRouteTable
 
   # Security Group for App Runner
-  TestVisualizerAppRunnerSecurityGroup:
-    Type: 'AWS::EC2::SecurityGroup'
+  TestAppRunnerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: 'Allow App Runner access'
-      VpcId: !Ref TestVisualizerVPC
+      VpcId: !Ref TestVpc
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
-          CidrIp: '0.0.0.0/0'
+          CidrIp: "0.0.0.0/0"
       Tags:
         - Key: Name
-          Value: 'Detectronic-Test-Visualizer-AppRunner-SecurityGroup'
+          Value: Test-AppRunner-SecurityGroup
 
   # App Runner VPC Connector
-  TestVisualizerAppRunnerVpcConnector:
-    Type: 'AWS::AppRunner::VpcConnector'
+  TestAppRunnerVpcConnector:
+    Type: AWS::AppRunner::VpcConnector
     Properties:
       Subnets:
-        - !Ref TestVisualizerPrivateSubnet1
-        - !Ref TestVisualizerPrivateSubnet2
+        - !Ref TestPrivateSubnet1
+        - !Ref TestPrivateSubnet2
       SecurityGroups:
-        - !Ref TestVisualizerAppRunnerSecurityGroup
+        - !Ref TestAppRunnerSecurityGroup
       Tags:
         - Key: Name
-          Value: 'Detectronic-Test-Visualizer-AppRunner-VPCConnector'
+          Value: Test-AppRunner-VPCConnector
 
   # App Runner Service
-  TestVisualizerAppRunnerService:
-    Type: 'AWS::AppRunner::Service'
+  TestAppRunnerService:
+    Type: AWS::AppRunner::Service
     Properties:
-      ServiceName: 'Detectronic-Test-Visualizer-AppRunnerService'
+      ServiceName: 'Test-AppRunnerService'
       SourceConfiguration:
         ImageRepository:
           ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/my-app-repo:${EcrImageTag}"
           ImageRepositoryType: ECR
         AuthenticationConfiguration:
-          AccessRoleArn: !GetAtt TestVisualizerAppRunnerAccessRole.Arn
+          AccessRoleArn: !GetAtt TestAppRunnerAccessRole.Arn
       InstanceConfiguration:
         Cpu: '1 vCPU'
         Memory: '2 GB'
       NetworkConfiguration:
         EgressConfiguration:
           EgressType: VPC
-          VpcConnectorArn: !Ref TestVisualizerAppRunnerVpcConnector
+          VpcConnectorArn: !Ref TestAppRunnerVpcConnector
       Tags:
         - Key: Name
-          Value: 'Detectronic-Test-Visualizer-AppRunnerService'
+          Value: Test-AppRunner-Service
 
   # IAM Role for App Runner
-  TestVisualizerAppRunnerAccessRole:
-    Type: 'AWS::IAM::Role'
+  TestAppRunnerAccessRole:
+    Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -210,24 +248,24 @@ Resources:
                 Resource: '*'
       Tags:
         - Key: Name
-          Value: 'Detectronic-Test-Visualizer-AppRunner-Role'
+          Value: 'Test-AppRunner-Role'
 
   # S3 Bucket for Pipeline Artifacts
-  TestVisualizerPipelineArtifactsBucket:
+  TestPipelineArtifactsBucket:
     Type: 'AWS::S3::Bucket'
     Properties:
-      BucketName: !Sub "detectronic-test-visualizer-pipeline-artifacts-${AWS::AccountId}-${AWS::Region}"
+      BucketName: !Sub "test-pipeline-artifacts-${AWS::AccountId}-${AWS::Region}"
       AccessControl: Private
 
   # CodePipeline for Testing
-  TestVisualizerPipeline:
-    Type: 'AWS::CodePipeline::Pipeline'
+  TestPipeline:
+    Type: AWS::CodePipeline::Pipeline
     Properties:
-      Name: 'Detectronic-Test-Visualizer-Pipeline'
-      RoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/Detectronic-Test-Pipeline-Role"
+      Name: 'Test-Pipeline'
+      RoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/Test-Pipeline-Role"
       ArtifactStore:
         Type: S3
-        Location: !Ref TestVisualizerPipelineArtifactsBucket
+        Location: !Ref TestPipelineArtifactsBucket
       Stages:
         - Name: Source
           Actions:
@@ -243,7 +281,7 @@ Resources:
                 ConnectionArn: !Ref CodeStarConnectionArn
                 FullRepositoryId: "Detectronic-JB/Test-Data-Visualizer"
                 BranchName: "main"
-              RoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/Detectronic-Test-Pipeline-Role"
+              RoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/Test-Pipeline-Role"
         - Name: Build
           Actions:
             - Name: BuildAction
@@ -256,15 +294,15 @@ Resources:
                 - Name: SourceOutput
               Configuration:
                 ProjectName: !Ref BuildProject
-              RoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/Detectronic-Test-Pipeline-Role"
+              RoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/Test-Pipeline-Role"
 
 Outputs:
   VPCId:
-    Description: 'Detectronic Test Visualizer VPC ID'
-    Value: !Ref TestVisualizerVPC
+    Description: 'Test VPC ID'
+    Value: !Ref TestVpc
   AppRunnerServiceURL:
     Description: 'App Runner Service URL'
-    Value: !GetAtt TestVisualizerAppRunnerService.ServiceUrl
+    Value: !GetAtt TestAppRunnerService.ServiceUrl
   PipelineName:
-    Description: 'Detectronic Test Visualizer Pipeline Name'
-    Value: !Ref TestVisualizerPipeline
+    Description: 'Test Pipeline Name'
+    Value: !Ref TestPipeline
