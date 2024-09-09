@@ -17,7 +17,6 @@ Parameters:
   FullRepositoryId:
     Type: String
     Default: "Detectronic/Data-Visualiser"
-
   CodeStarConnectionArn:
     Type: String
     Default: "arn:aws:codeconnections:eu-west-1:583261726886:connection/7fba6c00-7d2d-4878-8ac6-13f47013dfa7"
@@ -222,10 +221,12 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: apprunner.amazonaws.com
+              Service:
+                - apprunner.amazonaws.com
+                - codebuild.amazonaws.com
             Action: 'sts:AssumeRole'
       Policies:
-        - PolicyName: 'AppRunnerECRAccess'
+        - PolicyName: 'AppRunnerAndCodeBuildAccess'
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -233,10 +234,15 @@ Resources:
                 Action:
                   - 'ecr:GetDownloadUrlForLayer'
                   - 'ecr:BatchGetImage'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 's3:GetObject'
+                  - 's3:PutObject'
                 Resource: '*'
       Tags:
         - Key: Name
-          Value: 'Test-AppRunner-Role'
+        Value: 'Test-AppRunner-Role'
 
   # S3 Bucket for Pipeline Artifacts
   TestPipelineArtifactsBucket:
@@ -282,8 +288,8 @@ Resources:
                 - Name: SourceOutput
               Configuration:
                 ConnectionArn: !Ref CodeStarConnectionArn
-                FullRepositoryId: "Detectronic-JB/Test-Data-Visualizer"
-                BranchName: "main"
+                FullRepositoryId: !Ref FullRepositoryId
+                BranchName: !Ref TestGitBranch
               RoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/Test-Pipeline-Role"
         - Name: Build
           Actions:
