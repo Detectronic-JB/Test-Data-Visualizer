@@ -157,7 +157,7 @@ Resources:
           - Name: REPOSITORY_URI
             Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}"
       Source:
-        Type: CODEPIPELINE  # Added the required Type property
+        Type: CODEPIPELINE
       ServiceRole: !GetAtt CodeBuildServiceRole.Arn
       BuildSpec: |
         version: 0.2
@@ -193,7 +193,7 @@ Resources:
         Image: aws/codebuild/standard:5.0
         Type: LINUX_CONTAINER
       Source:
-        Type: CODEPIPELINE  # Added the required Type property
+        Type: CODEPIPELINE
       ServiceRole: !GetAtt CodeBuildServiceRole.Arn
       BuildSpec: |
         version: 0.2
