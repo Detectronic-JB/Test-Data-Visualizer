@@ -140,7 +140,7 @@ Resources:
   PipelineArtifactsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "datavisualizer-pipeline-artifacts-${AWS::AccountId}-${AWS::Region}-${AWS::Timestamp}"
+      BucketName: !Sub "datavisualizer-pipeline-artifacts-${AWS::StackName}-${AWS::Region}"
       VersioningConfiguration:
         Status: Enabled
       LoggingConfiguration:
@@ -154,7 +154,7 @@ Resources:
   PipelineArtifactsLoggingBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "datavisualizer-logging-${AWS::AccountId}-${AWS::Region}-${AWS::Timestamp}"
+      BucketName: !Sub "datavisualizer-logging-${AWS::StackName}-${AWS::Region}"
       VersioningConfiguration:
         Status: Enabled
       AccessControl: LogDeliveryWrite
