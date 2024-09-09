@@ -20,7 +20,7 @@ Parameters:
 
   CodeStarConnectionArn:
     Type: String
-    Default: ""
+    Default: "arn:aws:codeconnections:eu-west-1:583261726886:connection/7fba6c00-7d2d-4878-8ac6-13f47013dfa7"
   EcrImageTag:
     Type: String
     Default: "latest"
@@ -36,18 +36,6 @@ Parameters:
   TestingVpcCidr:
     Type: String
     Default: "172.31.0.0/16"
-  TestingVpcSecurityGroupId:
-    Type: String
-    Default: ""
-  TestingVpcSubnetId1:
-    Type: String
-    Default: ""
-  TestingVpcSubnetId2:
-    Type: String
-    Default: ""
-  TestingVpcSubnetId3:
-    Type: String
-    Default: ""
 
 Resources:
   # VPC
@@ -256,6 +244,21 @@ Resources:
     Properties:
       BucketName: !Sub "test-pipeline-artifacts-${AWS::AccountId}-${AWS::Region}"
       AccessControl: Private
+
+  # CodeBuild Project
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: "Test-Build-Project"
+      Source:
+        Type: CODEPIPELINE
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: "aws/codebuild/standard:5.0"
+      ServiceRole: !GetAtt TestAppRunnerAccessRole.Arn
 
   # CodePipeline for Testing
   TestPipeline:
