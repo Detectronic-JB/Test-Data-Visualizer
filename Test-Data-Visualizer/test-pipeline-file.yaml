@@ -207,6 +207,7 @@ Resources:
           files:
             - '**/*'
 
+  # Reuse the existing AppRunner role instead of creating a new one
   AppRunnerServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -218,21 +219,9 @@ Resources:
             Principal:
               Service: apprunner.amazonaws.com
             Action: "sts:AssumeRole"
-      Policies:
-        - PolicyName: "AppRunnerFullAccess"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - apprunner:*
-                  - ecr:*
-                  - logs:*
-                  - s3:GetObject
-                  - s3:PutObject
-                  - ec2:Describe*
-                Resource: "*"
+      # Removing AppRunnerFullAccess policy as it already exists
 
+  # Reference the existing VPC Connector
   AppRunnerService:
     Type: AWS::AppRunner::Service
     Properties:
@@ -251,19 +240,10 @@ Resources:
       NetworkConfiguration:
         EgressConfiguration:
           EgressType: VPC
-          VpcConnectorArn: !Ref VpcConnector
+          VpcConnectorArn: arn:aws:apprunner:eu-west-1:583261726886:vpcconnector/VpcConnector-WZi6zkSM1RXi/1/2115abf6927047bbb471aae78e6a4f99
       HealthCheckConfiguration:
         Protocol: HTTP
         Path: "/health"
-
-  VpcConnector:
-    Type: AWS::AppRunner::VpcConnector
-    Properties:
-      Subnets:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-      SecurityGroups:
-        - !Ref RdsSecurityGroupId
 
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
