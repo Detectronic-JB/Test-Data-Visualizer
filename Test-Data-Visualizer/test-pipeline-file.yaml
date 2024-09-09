@@ -23,7 +23,6 @@ Parameters:
     Type: String
     Default: "latest"
 
-  # VPC and RDS Outputs from the already deployed VPC/RDS Stack
   VPCId:
     Type: String
     Default: "vpc-0ca52eb6b0f7d03a3"
@@ -49,6 +48,73 @@ Parameters:
     Default: "arn:aws:secretsmanager:eu-west-1:583261726886:secret:DataVisualizer/Secret-Test-iTBotZ"
 
 Resources:
+  PipelineArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: "data-visualizer-test-pipeline-artifacts"
+      VersioningConfiguration:
+        Status: Enabled
+      LoggingConfiguration:
+        DestinationBucketName: !Ref PipelineArtifactsLoggingBucket
+        LogFilePrefix: "artifacts-logs"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  PipelineArtifactsLoggingBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: "data-visualizer-test-pipeline-logs"
+      VersioningConfiguration:
+        Status: Enabled
+
+  PipelineArtifactsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref PipelineArtifactsBucket
+      PolicyDocument:
+        Statement:
+          - Effect: "Deny"
+            Action: "s3:*"
+            Principal: "*"
+            Resource:
+              - !Sub "${PipelineArtifactsBucket.Arn}/*"
+              - !GetAtt PipelineArtifactsBucket.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  CodeBuildProjectPrepareCloudFormation:
+    Type: AWS::CodeBuild::Project
+    Properties: 
+      Name: "DataVisualizerTest-CodeBuildPrepareCloudFormation"
+      Artifacts: 
+        Type: CODEPIPELINE
+      Environment: 
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        Type: LINUX_CONTAINER
+      Source: 
+        Type: CODEPIPELINE
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Description: "CodeBuild project for preparing CloudFormation templates"
+
+  CodeBuildProjectBuild:
+    Type: AWS::CodeBuild::Project
+    Properties: 
+      Name: "DataVisualizerTest-CodeBuildBuild"
+      Artifacts: 
+        Type: CODEPIPELINE
+      Environment: 
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        Type: LINUX_CONTAINER
+      Source: 
+        Type: CODEPIPELINE
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Description: "CodeBuild project for building container image"
+
   AppRunnerServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -176,4 +242,4 @@ Resources:
                 TemplatePath: AppRunnerCloudFormation::template.yml
               RunOrder: 1
 
-  # Other Resources (S3 Buckets, CodeBuild Roles, etc.) remain the same.
+  # Other Resources (S3 Buckets, IAM Roles, etc.) remain unchanged.
