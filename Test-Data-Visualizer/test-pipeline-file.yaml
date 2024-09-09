@@ -211,30 +211,6 @@ Resources:
           files:
             - '**/*'
 
-  # Reference the existing AppRunner role using the AppRunnerRoleArn parameter
-  AppRunnerService:
-    Type: AWS::AppRunner::Service
-    Properties:
-      ServiceName: "DataVisualizerTest-AppRunner"
-      SourceConfiguration:
-        ImageRepository:
-          ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}:${EcrImageTag}"
-          ImageConfiguration:
-            Port: "8080"
-          ImageRepositoryType: ECR
-        AuthenticationConfiguration:
-          AccessRoleArn: !Ref AppRunnerRoleArn  # Referencing the existing AppRunner role
-      InstanceConfiguration:
-        Cpu: "1024"
-        Memory: "2048"
-      NetworkConfiguration:
-        EgressConfiguration:
-          EgressType: VPC
-          VpcConnectorArn: arn:aws:apprunner:eu-west-1:583261726886:vpcconnector/VpcConnector-WZi6zkSM1RXi/1/2115abf6927047bbb471aae78e6a4f99
-      HealthCheckConfiguration:
-        Protocol: HTTP
-        Path: "/health"
-
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
