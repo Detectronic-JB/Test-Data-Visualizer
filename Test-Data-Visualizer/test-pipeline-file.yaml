@@ -304,7 +304,7 @@ Resources:
   AppRunnerService:
     Type: AWS::AppRunner::Service
     Properties:
-      ServiceName: "datavisualizer-apprunner-service"
+      ServiceName: "DataVisualizerAppRunnerService"
       SourceConfiguration:
         ImageRepository:
           ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/datavisualizer:${EcrImageTag}"
@@ -329,7 +329,7 @@ Resources:
             Principal:
               Service: apprunner.amazonaws.com
       Policies:
-        - PolicyName: AppRunnerServicePolicy
+        - PolicyName: AppRunnerECRAccessPolicy
           PolicyDocument:
             Statement:
               - Effect: Allow
@@ -337,12 +337,18 @@ Resources:
                   - "ecr:GetDownloadUrlForLayer"
                   - "ecr:BatchGetImage"
                   - "ecr:BatchCheckLayerAvailability"
-                  - "ecr:ListImages"
                   - "ecr:DescribeImages"
+                Resource: !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/datavisualizer"
+              - Effect: Allow
+                Action:
+                  - "ecr:GetAuthorizationToken"
                 Resource: "*"
               - Effect: Allow
-                Action: "ecr:GetAuthorizationToken"
-                Resource: "*"
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apprunner/*"
 
 Outputs:
   PipelineId:
