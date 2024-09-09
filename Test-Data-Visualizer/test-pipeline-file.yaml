@@ -182,7 +182,31 @@ Resources:
         artifacts:
           files:
             - '**/*'
-  
+
+  CodeBuildProjectPrepareCloudFormation:  # Adding missing CodeBuild project for CloudFormation preparation
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: "DataVisualizerTest-PrepareCloudFormation"
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        Type: LINUX_CONTAINER
+      Source:
+        Type: CODEPIPELINE
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Description: "CodeBuild project for preparing CloudFormation templates"
+      BuildSpec: |
+        version: 0.2
+        phases:
+          build:
+            commands:
+              - echo Preparing CloudFormation templates...
+        artifacts:
+          files:
+            - '**/*'
+
   AppRunnerServiceRole:
     Type: AWS::IAM::Role
     Properties:
