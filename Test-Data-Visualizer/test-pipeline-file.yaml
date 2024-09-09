@@ -39,8 +39,6 @@ Parameters:
     Default: "subnet-0e816d94fb9e38d54"  # Public Subnet
 
 Resources:
-  # CodePipeline definition and supporting resources...
-  
   AppRunnerService:
     Type: AWS::AppRunner::Service
     Properties:
