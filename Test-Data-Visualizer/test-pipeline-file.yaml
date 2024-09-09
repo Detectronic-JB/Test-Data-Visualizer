@@ -140,7 +140,7 @@ Resources:
   PipelineArtifactsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: "datavisualizer-test-pipeline-artifacts"
+      BucketName: "datavisualizer-test-artifacts"
       VersioningConfiguration:
         Status: Enabled
       LoggingConfiguration:
@@ -154,7 +154,7 @@ Resources:
   PipelineArtifactsLoggingBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: "datavisualizer-test-pipeline-logging"
+      BucketName: "datavisualizer-test-logging"
       VersioningConfiguration:
         Status: Enabled
       AccessControl: LogDeliveryWrite
@@ -303,7 +303,7 @@ Resources:
   AppRunnerService:
     Type: AWS::AppRunner::Service
     Properties:
-      ServiceName: !Sub "DataVisualizerAppRunnerService-${AWS::StackName}"
+      ServiceName: !Sub "DataVisualizerApp-${AWS::StackName}"
       SourceConfiguration:
         ImageRepository:
           ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/datavisualizer:${EcrImageTag}"
