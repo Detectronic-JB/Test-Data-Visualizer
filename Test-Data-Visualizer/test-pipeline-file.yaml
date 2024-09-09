@@ -1,48 +1,138 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  This template deploys a testing CodePipeline with its required resources for the Data Visualizer Test environment,
-  including an App Runner service.
+Description: CloudFormation template for Data Visualizer project - Pipeline and AppRunner service
 
 Parameters:
-  Environment:
-    Type: String
-    Default: "Testing"
-  TestGitBranch:
-    Type: String
-    Default: "main"
-  FullRepositoryId:
-    Type: String
-    Default: "Detectronic-JB/Test-Data-Visualizer"
   CodeStarConnectionArn:
     Type: String
-    Default: "arn:aws:codestar-connections:eu-west-1:583261726886:connection/7fba6c00-7d2d-4878-8ac6-13f47013dfa7"
-  EcrImageTag:
-    Type: String
-    Default: "latest"
+    Description: CodeStar Connection ARN for GitHub
+    Default: arn:aws:codestar-connections:eu-west-1:583261726886:connection/7fba6c00-7d2d-4878-8ac6-13f47013dfa7
   TestingRdsCredsSecretArn:
     Type: String
-    Default: "arn:aws:secretsmanager:eu-west-1:583261726886:secret:DataVisualizer/Rds/Test-RPbAAd"
+    Description: ARN for the RDS credentials secret
+    Default: arn:aws:secretsmanager:eu-west-1:583261726886:secret:DataVisualizer/Rds/Test-RPbAAd
   TestingSecretKeySecretArn:
     Type: String
-    Default: "arn:aws:secretsmanager:eu-west-1:583261726886:secret:DataVisualizer/Secret-Test-iTBotZ"
+    Description: ARN for the Secret Key secret
+    Default: arn:aws:secretsmanager:eu-west-1:583261726886:secret:DataVisualizer/Secret-Test-iTBotZ
   TestingVpcSecurityGroupId:
     Type: String
-    Default: "sg-0e14d868dfd8294ef"
+    Description: Security Group ID for the VPC
+    Default: sg-0e14d868dfd8294ef
   TestingVpcSubnetId1:
     Type: String
-    Default: "subnet-00c4efa393215aa"  # Private Subnet 1
+    Description: Subnet ID 1 for the VPC
+    Default: subnet-00c4efa393215aa
   TestingVpcSubnetId2:
     Type: String
-    Default: "subnet-083d121cdc5bc5e0c"  # Private Subnet 2
+    Description: Subnet ID 2 for the VPC
+    Default: subnet-083d121cdc5bc5e0c
   TestingVpcSubnetId3:
     Type: String
-    Default: "subnet-0e816d94fb9e38d54"  # Public Subnet
+    Description: Subnet ID 3 for the VPC
+    Default: subnet-0e816d94fb9e38d54
+  EcrImageTag:
+    Type: String
+    Description: ECR Image Tag
+    Default: latest
 
 Resources:
+  PipelineArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: datavisualizer-pipeline-artifacts-{{AWS::AccountId}}-{{AWS::Region}}
+
+  PipelineStackCloudFormationExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CloudFormationAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - s3:*
+                  - codestar-connections:UseConnection
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:BatchCheckLayerAvailability
+                Resource: "*"
+
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:BatchCheckLayerAvailability
+                  - s3:GetObject
+                  - s3:PutObject
+                  - secretsmanager:GetSecretValue
+                Resource: "*"
+
+  AppRunnerServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apprunner.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AppRunnerServicePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:BatchCheckLayerAvailability
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  AppRunnerVpcConnector:
+    Type: AWS::AppRunner::VpcConnector
+    Properties:
+      VpcConnectorName: DataVisualizerVpcConnector
+      Subnets:
+        - !Ref TestingVpcSubnetId1
+        - !Ref TestingVpcSubnetId2
+        - !Ref TestingVpcSubnetId3
+      SecurityGroups:
+        - !Ref TestingVpcSecurityGroupId
+
   AppRunnerService:
     Type: AWS::AppRunner::Service
     Properties:
-      ServiceName: "DataVizAppService"
+      ServiceName: DataVisualizerService
       SourceConfiguration:
         ImageRepository:
           ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/datavisualizer:${EcrImageTag}"
@@ -56,53 +146,66 @@ Resources:
         EgressConfiguration:
           EgressType: VPC
           VpcConnectorArn: !Ref AppRunnerVpcConnector
-      Tags:
-        - Key: "Environment"
-          Value: "Test"
 
-  AppRunnerServiceRole:
-    Type: AWS::IAM::Role
+  DataVisualizerPipeline:
+    Type: AWS::CodePipeline::Pipeline
     Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Action: "sts:AssumeRole"
-            Principal:
-              Service: apprunner.amazonaws.com
-      Policies:
-        - PolicyName: AppRunnerECRAccessPolicy
-          PolicyDocument:
-            Statement:
-              - Effect: Allow
-                Action:
-                  - "ecr:GetDownloadUrlForLayer"
-                  - "ecr:BatchGetImage"
-                  - "ecr:BatchCheckLayerAvailability"
-                  - "ecr:DescribeImages"
-                Resource: !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/datavisualizer"
-              - Effect: Allow
-                Action:
-                  - "ecr:GetAuthorizationToken"
-                Resource: "*"
-              - Effect: Allow
-                Action:
-                  - "logs:CreateLogGroup"
-                  - "logs:CreateLogStream"
-                  - "logs:PutLogEvents"
-                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apprunner/*"
-
-  AppRunnerVpcConnector:
-    Type: AWS::AppRunner::VpcConnector
-    Properties:
-      Subnets:
-        - !Ref TestingVpcSubnetId1
-        - !Ref TestingVpcSubnetId2
-        - !Ref TestingVpcSubnetId3
-      SecurityGroups:
-        - !Ref TestingVpcSecurityGroupId
+      RoleArn: !GetAtt PipelineStackCloudFormationExecutionRole.Arn
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceCodeRepo
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: 1
+              Configuration:
+                ConnectionArn: !Ref CodeStarConnectionArn
+                FullRepositoryId: Detectronic-JB/Data-Visualizer
+                BranchName: main
+              OutputArtifacts:
+                - Name: SourceArtifact
+        - Name: Build
+          Actions:
+            - Name: CodeBuildAction
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName: DataVisualizerBuild
+              InputArtifacts:
+                - Name: SourceArtifact
+              OutputArtifacts:
+                - Name: BuildArtifact
+        - Name: Deploy
+          Actions:
+            - Name: DeployAppRunner
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: 1
+              Configuration:
+                StackName: AppRunnerDeployment
+                ActionMode: CHANGE_SET_REPLACE
+                Capabilities: CAPABILITY_NAMED_IAM
+                TemplatePath: BuildArtifact::outputtemplate.yaml
+              InputArtifacts:
+                - Name: BuildArtifact
+      ArtifactStore:
+        Type: S3
+        Location: !Ref PipelineArtifactsBucket
 
 Outputs:
-  AppRunnerServiceURL:
-    Description: "URL of the App Runner service"
+  AppRunnerServiceUrl:
+    Description: URL for the AppRunner service
     Value: !GetAtt AppRunnerService.ServiceUrl
+    Export:
+      Name: DataVisualizerServiceUrl
+
+  PipelineName:
+    Description: Name of the CodePipeline
+    Value: !Ref DataVisualizerPipeline
