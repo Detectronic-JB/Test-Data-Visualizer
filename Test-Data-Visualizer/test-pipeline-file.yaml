@@ -64,18 +64,6 @@ Resources:
                 BranchName: !Ref TestGitBranch
               OutputArtifacts:
                 - Name: SourceCodeAsZip
-        - Name: UnitTest
-          Actions:
-            - Name: UnitTest
-              ActionTypeId:
-                Category: Build
-                Owner: AWS
-                Provider: CodeBuild
-                Version: "1"
-              Configuration:
-                ProjectName: !Ref CodeBuildProjectUnitTest
-              InputArtifacts:
-                - Name: SourceCodeAsZip
         - Name: BuildAndDeploy
           Actions:
             - Name: BuildContainerImage
@@ -88,11 +76,25 @@ Resources:
                 - Name: SourceCodeAsZip
               Configuration:
                 ProjectName: !Ref CodeBuildProjectBuild
+            - Name: Deploy
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: "1"
+                Provider: CloudFormation
+              InputArtifacts:
+                - Name: SourceCodeAsZip
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                RoleArn: !GetAtt PipelineStackCloudFormationExecutionRole.Arn
+                StackName: !Ref AWS::StackName
+                TemplatePath: SourceCodeAsZip::test-pipeline-file.yaml
+                Capabilities: CAPABILITY_NAMED_IAM
 
   PipelineArtifactsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: "datavisualizer-test-pipeline-artifacts"
+      BucketName: !Sub "datavisualizer-test-pipeline-artifacts-${AWS::AccountId}"
       VersioningConfiguration:
         Status: Enabled
       LoggingConfiguration:
@@ -106,7 +108,7 @@ Resources:
   PipelineArtifactsLoggingBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: "datavisualizer-test-pipeline-logging"
+      BucketName: !Sub "datavisualizer-test-pipeline-logging-${AWS::AccountId}"
       VersioningConfiguration:
         Status: Enabled
       AccessControl: LogDeliveryWrite
@@ -195,20 +197,31 @@ Resources:
                   - "s3:PutObject"
                 Resource: !Sub "arn:${AWS::Partition}:s3:::${PipelineArtifactsBucket}/*"
 
-  CodeBuildProjectUnitTest:
-    Type: AWS::CodeBuild::Project
+  PipelineStackCloudFormationExecutionRole:
+    Type: AWS::IAM::Role
     Properties:
-      Artifacts:
-        Type: CODEPIPELINE
-      Environment:
-        Type: LINUX_CONTAINER
-        ComputeType: BUILD_GENERAL1_SMALL
-        Image: aws/codebuild/amazonlinux2-x86_64-standard:4.0
-      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
-      Source:
-        Type: CODEPIPELINE
-      TimeoutInMinutes: 60
-      Description: "Build project for unit tests"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          Effect: Allow
+          Action: "sts:AssumeRole"
+          Principal:
+            Service: cloudformation.amazonaws.com
+      Policies:
+        - PolicyName: CloudFormationPipelineRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "cloudformation:DescribeChangeSet"
+                  - "cloudformation:DescribeStackResources"
+                  - "cloudformation:DescribeStackResource"
+                  - "cloudformation:DescribeStacks"
+                  - "cloudformation:GetTemplate"
+                  - "cloudformation:ListStackResources"
+                  - "cloudformation:UpdateStack"
+                  - "cloudformation:CreateStack"
+                Resource: "*"
 
   CodeBuildProjectBuild:
     Type: AWS::CodeBuild::Project
@@ -228,7 +241,7 @@ Resources:
   AppRunnerService:
     Type: AWS::AppRunner::Service
     Properties:
-      ServiceName: !Sub "${AWS::StackName}-App"
+      ServiceName: "DataVisualizerAppService"
       SourceConfiguration:
         ImageRepository:
           ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/datavisualizer:${EcrImageTag}"
@@ -275,9 +288,7 @@ Resources:
                 Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apprunner/*"
 
 Outputs:
-  PipelineId:
-    Description: "The ID of the CodePipeline."
-    Value: !Ref Pipeline
-  AppRunnerServiceUrl:
-    Description: "URL of the App Runner service."
-    Value: !GetAtt AppRunnerService.ServiceUrl
+  AppRunnerServiceArn:
+    Value: !GetAtt AppRunnerService.Arn
+    Export:
+      Name: "AppRunnerServiceArn"
