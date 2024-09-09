@@ -304,7 +304,7 @@ Resources:
   AppRunnerService:
     Type: AWS::AppRunner::Service
     Properties:
-      ServiceName: "DataVisualizerAppRunnerService"
+      ServiceName: !Sub "DataVisualizerAppRunnerService-${AWS::Timestamp}"
       SourceConfiguration:
         ImageRepository:
           ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/datavisualizer:${EcrImageTag}"
