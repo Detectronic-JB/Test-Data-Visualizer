@@ -266,7 +266,6 @@ Resources:
                   - "cloudformation:GetTemplate"
                   - "cloudformation:ListStackResources"
                   - "cloudformation:ListStacks"
-                  - "cloudformation:ListStackResources"
                   - "cloudformation:UpdateStack"
                   - "cloudformation:CreateStack"
                 Resource: "*"
@@ -304,7 +303,7 @@ Resources:
   AppRunnerService:
     Type: AWS::AppRunner::Service
     Properties:
-      ServiceName: !Sub "DataVisualizerAppRunnerService-${AWS::Timestamp}"
+      ServiceName: !Sub "DataVisualizerAppRunnerService-${AWS::StackName}"
       SourceConfiguration:
         ImageRepository:
           ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/datavisualizer:${EcrImageTag}"
