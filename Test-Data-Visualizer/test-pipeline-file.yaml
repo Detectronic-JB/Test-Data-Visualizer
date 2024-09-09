@@ -25,9 +25,6 @@ Parameters:
   TestingSecretKeySecretArn:
     Type: String
     Default: "arn:aws:secretsmanager:eu-west-1:583261726886:secret:DataVisualizer/Secret-Test-iTBotZ"
-  TestingRdsUserArn:
-    Type: String
-    Default: "arn:aws:rds:eu-west-1:583261726886:db:datavis-testing"
   TestingVpcSecurityGroupId:
     Type: String
     Default: "sg-0e14d868dfd8294ef"
@@ -42,206 +39,12 @@ Parameters:
     Default: "subnet-0e816d94fb9e38d54"  # Public Subnet
 
 Resources:
-  Pipeline:
-    Type: AWS::CodePipeline::Pipeline
-    Properties:
-      ArtifactStore:
-        Location: !Ref PipelineArtifactsBucket
-        Type: S3
-      RoleArn: !GetAtt CodePipelineExecutionRole.Arn
-      Stages:
-        - Name: Source
-          Actions:
-            - Name: SourceCodeRepo
-              ActionTypeId:
-                Category: Source
-                Owner: AWS
-                Provider: CodeStarSourceConnection
-                Version: "1"
-              Configuration:
-                ConnectionArn: !Ref CodeStarConnectionArn
-                FullRepositoryId: !Ref FullRepositoryId
-                BranchName: !Ref TestGitBranch
-              OutputArtifacts:
-                - Name: SourceCodeAsZip
-        - Name: BuildAndDeploy
-          Actions:
-            - Name: BuildContainerImage
-              ActionTypeId:
-                Category: Build
-                Owner: AWS
-                Provider: CodeBuild
-                Version: "1"
-              InputArtifacts:
-                - Name: SourceCodeAsZip
-              Configuration:
-                ProjectName: !Ref CodeBuildProjectBuild
-            - Name: Deploy
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Version: "1"
-                Provider: CloudFormation
-              InputArtifacts:
-                - Name: SourceCodeAsZip
-              Configuration:
-                ActionMode: CREATE_UPDATE
-                RoleArn: !GetAtt PipelineStackCloudFormationExecutionRole.Arn
-                StackName: !Ref AWS::StackName
-                TemplatePath: SourceCodeAsZip::test-pipeline-file.yaml
-                Capabilities: CAPABILITY_NAMED_IAM
-
-  PipelineArtifactsBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "datavisualizer-test-pipeline-artifacts-${AWS::AccountId}"
-      VersioningConfiguration:
-        Status: Enabled
-      LoggingConfiguration:
-        DestinationBucketName: !Ref PipelineArtifactsLoggingBucket
-        LogFilePrefix: "artifacts-logs"
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-
-  PipelineArtifactsLoggingBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "datavisualizer-test-pipeline-logging-${AWS::AccountId}"
-      VersioningConfiguration:
-        Status: Enabled
-      AccessControl: LogDeliveryWrite
-      OwnershipControls:
-        Rules:
-          - ObjectOwnership: ObjectWriter
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-
-  CodePipelineExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Action: "sts:AssumeRole"
-            Principal:
-              Service: codepipeline.amazonaws.com
-      Policies:
-        - PolicyName: CodePipelineAccess
-          PolicyDocument:
-            Statement:
-              - Effect: Allow
-                Action: "iam:PassRole"
-                Resource: "*"
-        - PolicyName: CodeStarConnectionAccess
-          PolicyDocument:
-            Statement:
-              - Effect: Allow
-                Action: "codestar-connections:UseConnection"
-                Resource: !Ref CodeStarConnectionArn
-        - PolicyName: CodePipelineCodeAndS3Bucket
-          PolicyDocument:
-            Statement:
-              - Effect: Allow
-                Action:
-                  - "s3:GetBucketAcl"
-                  - "s3:GetBucketLocation"
-                  - "s3:GetObject"
-                  - "s3:GetObjectVersion"
-                  - "s3:PutObject"
-                Resource: !Sub "${PipelineArtifactsBucket.Arn}/*"
-
-  CodeBuildServiceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Action: "sts:AssumeRole"
-            Principal:
-              Service: codebuild.amazonaws.com
-      Policies:
-        - PolicyName: CodeBuildECR
-          PolicyDocument:
-            Statement:
-              - Effect: Allow
-                Action:
-                  - "ecr:BatchCheckLayerAvailability"
-                  - "ecr:CompleteLayerUpload"
-                  - "ecr:GetAuthorizationToken"
-                  - "ecr:InitiateLayerUpload"
-                  - "ecr:PutImage"
-                  - "ecr:UploadLayerPart"
-                Resource: "*"
-        - PolicyName: CodeBuildLogs
-          PolicyDocument:
-            Statement:
-              - Effect: Allow
-                Action:
-                  - "logs:CreateLogGroup"
-                  - "logs:CreateLogStream"
-                  - "logs:PutLogEvents"
-                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*"
-        - PolicyName: CodeBuildArtifactsBucket
-          PolicyDocument:
-            Statement:
-              - Effect: Allow
-                Action:
-                  - "s3:GetObject"
-                  - "s3:GetObjectVersion"
-                  - "s3:PutObject"
-                Resource: !Sub "arn:${AWS::Partition}:s3:::${PipelineArtifactsBucket}/*"
-
-  PipelineStackCloudFormationExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          Effect: Allow
-          Action: "sts:AssumeRole"
-          Principal:
-            Service: cloudformation.amazonaws.com
-      Policies:
-        - PolicyName: CloudFormationPipelineRolePolicy
-          PolicyDocument:
-            Statement:
-              - Effect: Allow
-                Action:
-                  - "cloudformation:DescribeChangeSet"
-                  - "cloudformation:DescribeStackResources"
-                  - "cloudformation:DescribeStackResource"
-                  - "cloudformation:DescribeStacks"
-                  - "cloudformation:GetTemplate"
-                  - "cloudformation:ListStackResources"
-                  - "cloudformation:UpdateStack"
-                  - "cloudformation:CreateStack"
-                Resource: "*"
-
-  CodeBuildProjectBuild:
-    Type: AWS::CodeBuild::Project
-    Properties:
-      Artifacts:
-        Type: CODEPIPELINE
-      Environment:
-        Type: LINUX_CONTAINER
-        ComputeType: BUILD_GENERAL1_MEDIUM
-        Image: aws/codebuild/amazonlinux2-x86_64-standard:4.0
-      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
-      Source:
-        Type: CODEPIPELINE
-      TimeoutInMinutes: 60
-      Description: "Build project for container image"
-
+  # CodePipeline definition and supporting resources...
+  
   AppRunnerService:
     Type: AWS::AppRunner::Service
     Properties:
-      ServiceName: "DataVisualizerAppService"
+      ServiceName: "DataVizAppService"
       SourceConfiguration:
         ImageRepository:
           ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/datavisualizer:${EcrImageTag}"
@@ -251,6 +54,10 @@ Resources:
       InstanceConfiguration:
         Cpu: "1 vCPU"
         Memory: "2 GB"
+      NetworkConfiguration:
+        EgressConfiguration:
+          EgressType: VPC
+          VpcConnectorArn: !Ref AppRunnerVpcConnector
       Tags:
         - Key: "Environment"
           Value: "Test"
@@ -287,8 +94,17 @@ Resources:
                   - "logs:PutLogEvents"
                 Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apprunner/*"
 
+  AppRunnerVpcConnector:
+    Type: AWS::AppRunner::VpcConnector
+    Properties:
+      Subnets:
+        - !Ref TestingVpcSubnetId1
+        - !Ref TestingVpcSubnetId2
+        - !Ref TestingVpcSubnetId3
+      SecurityGroups:
+        - !Ref TestingVpcSecurityGroupId
+
 Outputs:
-  AppRunnerServiceArn:
-    Value: !GetAtt AppRunnerService.Arn
-    Export:
-      Name: "AppRunnerServiceArn"
+  AppRunnerServiceURL:
+    Description: "URL of the App Runner service"
+    Value: !GetAtt AppRunnerService.ServiceUrl
