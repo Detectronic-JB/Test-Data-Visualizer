@@ -140,7 +140,7 @@ Resources:
   PipelineArtifactsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "datavisualizer-pipeline-artifacts-${AWS::StackName}-${AWS::Region}"
+      BucketName: "datavisualizer-pipeline-artifacts-583261726886"
       VersioningConfiguration:
         Status: Enabled
       LoggingConfiguration:
@@ -154,7 +154,7 @@ Resources:
   PipelineArtifactsLoggingBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "datavisualizer-logging-${AWS::StackName}-${AWS::Region}"
+      BucketName: "datavisualizer-logging-583261726886"
       VersioningConfiguration:
         Status: Enabled
       AccessControl: LogDeliveryWrite
