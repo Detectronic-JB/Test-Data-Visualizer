@@ -47,6 +47,10 @@ Parameters:
     Type: String
     Default: "arn:aws:secretsmanager:eu-west-1:583261726886:secret:DataVisualizer/Secret-Test-iTBotZ"
 
+  AppRunnerRoleArn:  # New parameter for the existing App Runner role
+    Type: String
+    Default: "arn:aws:iam::583261726886:role/DataVisualizerTest-AppRunnerRole"
+
 Resources:
   # ECR Repository for storing application images
   ECRRepository:
@@ -207,21 +211,7 @@ Resources:
           files:
             - '**/*'
 
-  # Reuse the existing AppRunner role instead of creating a new one
-  AppRunnerServiceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: "DataVisualizerTest-AppRunnerRole"
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: apprunner.amazonaws.com
-            Action: "sts:AssumeRole"
-      # Removing AppRunnerFullAccess policy as it already exists
-
-  # Reference the existing VPC Connector
+  # Reference the existing AppRunner role using the AppRunnerRoleArn parameter
   AppRunnerService:
     Type: AWS::AppRunner::Service
     Properties:
@@ -233,7 +223,7 @@ Resources:
             Port: "8080"
           ImageRepositoryType: ECR
         AuthenticationConfiguration:
-          AccessRoleArn: !GetAtt AppRunnerServiceRole.Arn
+          AccessRoleArn: !Ref AppRunnerRoleArn  # Referencing the existing AppRunner role
       InstanceConfiguration:
         Cpu: "1024"
         Memory: "2048"
