@@ -13,7 +13,7 @@ Parameters:
   
   FullRepositoryId:
     Type: String
-    Default: "my-app-repo"  # Updated to create a new ECR repository
+    Default: "my-app-repo"
 
   CodeStarConnectionArn:
     Type: String
@@ -160,7 +160,7 @@ Resources:
         Type: CODEPIPELINE
       ServiceRole: !GetAtt CodeBuildServiceRole.Arn
       Description: "CodeBuild project for building and pushing Docker images to ECR"
-      BuildSpec: |
+      BuildSpec: !Sub |
         version: 0.2
         phases:
           pre_build:
@@ -197,7 +197,7 @@ Resources:
         Type: CODEPIPELINE
       ServiceRole: !GetAtt CodeBuildServiceRole.Arn
       Description: "CodeBuild project for preparing CloudFormation templates"
-      BuildSpec: |
+      BuildSpec: !Sub |
         version: 0.2
         phases:
           build:
