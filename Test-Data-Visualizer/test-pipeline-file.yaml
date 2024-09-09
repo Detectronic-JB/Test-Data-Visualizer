@@ -13,7 +13,7 @@ Parameters:
   
   FullRepositoryId:
     Type: String
-    Default: "Detectronic/Data-Visualiser"
+    Default: "detectronic/data-visualiser"  # Updated to use lowercase and correct format
 
   CodeStarConnectionArn:
     Type: String
