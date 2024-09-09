@@ -244,6 +244,37 @@ Resources:
         - Key: Name
           Value: 'Test-AppRunner-Role'
 
+  # IAM Role for CodePipeline
+  TestPipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'CodePipelineAccess'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'codebuild:StartBuild'
+                  - 'codebuild:BatchGetBuilds'
+                  - 'codebuild:BatchGetProjects'
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                  - 's3:GetBucketVersioning'
+                  - 's3:PutBucketVersioning'
+                  - 'iam:PassRole'
+                Resource: '*'
+      Tags:
+        - Key: Name
+          Value: 'Test-Pipeline-Role'
+
   # S3 Bucket for Pipeline Artifacts
   TestPipelineArtifactsBucket:
     Type: 'AWS::S3::Bucket'
@@ -271,7 +302,7 @@ Resources:
     Type: AWS::CodePipeline::Pipeline
     Properties:
       Name: 'Test-Pipeline'
-      RoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/Test-Pipeline-Role"
+      RoleArn: !GetAtt TestPipelineRole.Arn
       ArtifactStore:
         Type: S3
         Location: !Ref TestPipelineArtifactsBucket
@@ -290,7 +321,7 @@ Resources:
                 ConnectionArn: !Ref CodeStarConnectionArn
                 FullRepositoryId: !Ref FullRepositoryId
                 BranchName: !Ref TestGitBranch
-              RoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/Test-Pipeline-Role"
+              RoleArn: !GetAtt TestPipelineRole.Arn
         - Name: Build
           Actions:
             - Name: BuildAction
@@ -303,7 +334,7 @@ Resources:
                 - Name: SourceOutput
               Configuration:
                 ProjectName: !Ref BuildProject
-              RoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/Test-Pipeline-Role"
+              RoleArn: !GetAtt TestPipelineRole.Arn
 
 Outputs:
   VPCId:
