@@ -85,6 +85,48 @@ Resources:
               Bool:
                 aws:SecureTransport: false
 
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: "DataVisualizerTest-CodeBuildServiceRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                - codebuild.amazonaws.com
+            Action: "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: "DataVisualizerTest-CodeBuildAccessPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+              - Effect: Allow
+                Action: 
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                Resource: "*"
+              - Effect: Allow
+                Action: 
+                  - "ec2:CreateNetworkInterface"
+                  - "ec2:DescribeNetworkInterfaces"
+                  - "ec2:DeleteNetworkInterface"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "ecr:GetDownloadUrlForLayer"
+                  - "ecr:BatchGetImage"
+                  - "ecr:GetAuthorizationToken"
+                Resource: "*"
+
   CodeBuildProjectPrepareCloudFormation:
     Type: AWS::CodeBuild::Project
     Properties: 
@@ -241,5 +283,3 @@ Resources:
                 StackName: !Sub "${AWS::StackName}-AppRunnerService"
                 TemplatePath: AppRunnerCloudFormation::template.yml
               RunOrder: 1
-
-  # Other Resources (S3 Buckets, IAM Roles, etc.) remain unchanged.
