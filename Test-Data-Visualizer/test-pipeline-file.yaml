@@ -159,7 +159,6 @@ Resources:
       Source:
         Type: CODEPIPELINE  # Added the required Type property
       ServiceRole: !GetAtt CodeBuildServiceRole.Arn
-      # Correct BuildSpec usage as a separate property
       BuildSpec: |
         version: 0.2
         phases:
@@ -196,7 +195,6 @@ Resources:
       Source:
         Type: CODEPIPELINE  # Added the required Type property
       ServiceRole: !GetAtt CodeBuildServiceRole.Arn
-      # Correct BuildSpec usage as a separate property
       BuildSpec: |
         version: 0.2
         phases:
