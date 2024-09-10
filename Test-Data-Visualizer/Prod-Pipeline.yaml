@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  This template deploys a production CodePipeline with its required resources for a production environment, including App Runner and ECR access.
+  This template deploys a production CodePipeline with its required resources for the production environment, including App Runner and ECR access.
 
 Parameters:
   Environment:
@@ -17,7 +17,7 @@ Parameters:
 
   CodeStarConnectionArn:
     Type: String
-    Default: "arn:aws:codestar-connections:eu-west-1:507038060985:connection/your_prod_connection_arn"
+    Default: "arn:aws:codestar-connections:eu-west-1:507038060985:connection/production-connection-arn"
 
   EcrImageTag:
     Type: String
@@ -33,7 +33,7 @@ Parameters:
 
   PrivateSubnet2:
     Type: String
-    Default: "subnet-0cf361de1a4beb167"
+    Default: "subnet-0c361de1a4beb167"
 
   RdsInstanceArn:
     Type: String
@@ -48,15 +48,7 @@ Parameters:
     Default: "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/Secret-Prod"
 
 Resources:
-  # ECR Repository for Production
-  ECRRepository:
-    Type: AWS::ECR::Repository
-    Properties:
-      RepositoryName: !Ref FullRepositoryId
-      ImageScanningConfiguration:
-        scanOnPush: true
-
-  # S3 Bucket for Production Artifacts
+  # S3 Buckets for Artifacts
   PipelineArtifactsBucketProd:
     Type: AWS::S3::Bucket
     Properties:
@@ -78,14 +70,13 @@ Resources:
       VersioningConfiguration:
         Status: Enabled
 
-  # S3 Bucket Policy for Production Artifacts
   PipelineArtifactsBucketPolicyProd:
     Type: AWS::S3::BucketPolicy
     Properties:
       Bucket: !Ref PipelineArtifactsBucketProd
       PolicyDocument:
         Statement:
-          - Effect: Deny
+          - Effect: "Deny"
             Action: "s3:*"
             Principal: "*"
             Resource:
@@ -95,7 +86,15 @@ Resources:
               Bool:
                 aws:SecureTransport: false
 
-  # IAM Role for CodeBuild in Production
+  # ECR Repository for Docker Images
+  ECRRepositoryProd:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref FullRepositoryId
+      ImageScanningConfiguration:
+        scanOnPush: true
+
+  # IAM Role for CodeBuild Service
   CodeBuildServiceRoleProd:
     Type: AWS::IAM::Role
     Properties:
@@ -145,101 +144,55 @@ Resources:
                   - "ecr:InitiateLayerUpload"
                 Resource: "*"
 
-  # App Runner IAM Role for ECR Access
-  AppRunnerAccessRoleProd:
-    Type: AWS::IAM::Role
+  # CodeBuild Project for Building and Pushing Docker Images
+  CodeBuildProjectBuildAndPushProd:
+    Type: AWS::CodeBuild::Project
     Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: apprunner.amazonaws.com
-            Action: "sts:AssumeRole"
-      Policies:
-        - PolicyName: "AppRunnerECRAccessPolicy"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - "ecr:GetDownloadUrlForLayer"
-                  - "ecr:BatchGetImage"
-                  - "ecr:GetAuthorizationToken"
-                Resource: "*"
+      Name: "DataVisualizerProd-CodeBuildBuildAndPush"
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        Type: LINUX_CONTAINER
+        PrivilegedMode: true  # Required for Docker build
+        EnvironmentVariables:
+          - Name: REPOSITORY_URI
+            Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}"
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            pre_build:
+              commands:
+                - echo Logging in to Amazon ECR...
+                - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
+            build:
+              commands:
+                - echo Build started on `date`
+                - echo Building the Docker image...
+                - docker build -t $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION .
+                - docker tag $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION $REPOSITORY_URI:latest
+            post_build:
+              commands:
+                - echo Pushing the Docker image...
+                - docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
+                - docker push $REPOSITORY_URI:latest
+                - echo Build completed on `date`
+          artifacts:
+            files:
+              - '**/*'
+      ServiceRole: !GetAtt CodeBuildServiceRoleProd.Arn
 
-  # App Runner VPC Connector for Production
-  VPCConnectorProd:
-    Type: AWS::AppRunner::VpcConnector
-    Properties:
-      VpcConnectorName: "DataVisualizerProd-VpcConnector"
-      Subnets:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-      SecurityGroups:
-        - !Ref RdsSecurityGroupId
-
-  # App Runner Service for Production
-  AppRunnerServiceProd:
-    Type: AWS::AppRunner::Service
-    Properties:
-      SourceConfiguration:
-        ImageRepository:
-          ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}:${EcrImageTag}"
-          ImageConfiguration:
-            Port: "8000"
-          ImageRepositoryType: ECR
-        AuthenticationConfiguration:
-          AccessRoleArn: !GetAtt AppRunnerAccessRoleProd.Arn  # Fix for ECR authentication
-        AutoDeploymentsEnabled: true
-      InstanceConfiguration:
-        Cpu: "1024"
-        Memory: "2048"
-      NetworkConfiguration:
-        EgressConfiguration:
-          EgressType: VPC
-          VpcConnectorArn: !Ref VPCConnectorProd
-      ServiceName: "DataVisualizerProdAppRunnerService"
-
-  # CodePipeline IAM Role for Production
-  CodePipelineServiceRoleProd:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: "DataVisualiserProd-CodePipelineServiceRole"
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: 
-                - codepipeline.amazonaws.com
-            Action: "sts:AssumeRole"
-      Path: "/"
-      Policies:
-        - PolicyName: "DataVisualiserProd-CodePipelineAccessPolicy"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - "s3:PutObject"
-                  - "s3:GetObject"
-                  - "s3:GetBucketLocation"
-                Resource: !Sub "arn:aws:s3:::${PipelineArtifactsBucketProd}/*"
-              - Effect: Allow
-                Action:
-                  - "codebuild:BatchGetBuilds"
-                  - "codebuild:StartBuild"
-                Resource: "*"
-
-  # CodePipeline for Production
+  # CodePipeline Configuration
   PipelineProd:
     Type: AWS::CodePipeline::Pipeline
     Properties:
       ArtifactStore:
         Location: !Ref PipelineArtifactsBucketProd
         Type: S3
-      RoleArn: !GetAtt CodePipelineServiceRoleProd.Arn
+      RoleArn: arn:aws:iam::507038060985:role/Data-Visualiser-Prod-Role
       RestartExecutionOnUpdate: true
       Stages:
         - Name: Source
@@ -282,7 +235,7 @@ Resources:
               OutputArtifacts:
                 - Name: AppRunnerCloudFormation
               Configuration:
-                ProjectName: !Ref CodeBuildProjectBuildAndPushProd
+                ProjectName: !Ref CodeBuildProjectPrepareCloudFormationProd
               RunOrder: 2
 
         - Name: AppRunnerDeploy
@@ -297,7 +250,7 @@ Resources:
                 - Name: AppRunnerCloudFormation
               Configuration:
                 ActionMode: REPLACE_ON_FAILURE
-                RoleArn: !GetAtt CodePipelineServiceRoleProd.Arn
+                RoleArn: arn:aws:iam::507038060985:role/Data-Visualiser-Prod-Role
                 StackName: !Sub "${AWS::StackName}-AppRunnerService"
                 TemplatePath: AppRunnerCloudFormation::template.yml
               RunOrder: 1
