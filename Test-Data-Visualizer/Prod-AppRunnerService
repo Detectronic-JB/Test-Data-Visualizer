@@ -32,7 +32,7 @@ Resources:
                 Action: 
                   - "secretsmanager:GetSecretValue"
                 Resource: 
-                  - !Ref SecretKeySecretArn  # Reference to the SecretKeySecretArn parameter
+                  - !Ref SecretKeySecretArn  # Correctly reference the parameter here
                   - "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/*"
 
   # App Runner Service Definition
@@ -41,7 +41,7 @@ Resources:
     Properties:
       ServiceName: DataVisualiserProd-AppRunnerService
       InstanceConfiguration:
-        InstanceRoleArn: !GetAtt AppRunnerInstanceRole.Arn  # Reference to the role
+        InstanceRoleArn: !GetAtt AppRunnerInstanceRole.Arn
       NetworkConfiguration:
         EgressConfiguration:
           EgressType: VPC
