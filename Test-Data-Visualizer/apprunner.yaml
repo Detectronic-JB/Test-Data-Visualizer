@@ -1,9 +1,0 @@
-version: 1.0
-runtime: nodejs16  # Adjust the runtime as per your application's requirements
-build:
-  commands:
-    install: npm install  # Command to install dependencies
-    build: npm run build  # Command to build the application
-run:
-  command: npm start  # Command to start the application
-port: 8080  # Set to port 8080
