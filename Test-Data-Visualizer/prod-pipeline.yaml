@@ -17,7 +17,7 @@ Parameters:
 
   CodeStarConnectionArn:
     Type: String
-    Default: "arn:aws:codestar-connections:eu-west-1:507038060985:connection/YOUR_PROD_CONNECTION_ARN"
+    Default: "arn:aws:codestar-connections:eu-west-1:507038060985:connection/your_prod_connection_arn"  # Update with production ARN
 
   EcrImageTag:
     Type: String
@@ -25,15 +25,15 @@ Parameters:
 
   VPCId:
     Type: String
-    Default: "vpc-0245ba2f2ade8956e"  # Update with your production VPC
+    Default: "vpc-0245ba2f2ade8956e"  # Update with your production VPC ID
 
   PrivateSubnet1:
     Type: String
-    Default: "subnet-0f0c94bd7e0ca2978"  # Update with your production subnet
+    Default: "subnet-0f0c94bd7e0ca2978"  # Update with your production private subnet 1
 
   PrivateSubnet2:
     Type: String
-    Default: "subnet-0cf361de1a4beb167"  # Update with your production subnet
+    Default: "subnet-0cf361de1a4beb167"  # Update with your production private subnet 2
 
   RdsInstanceArn:
     Type: String
@@ -48,6 +48,7 @@ Parameters:
     Default: "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/Secret-Prod"
 
 Resources:
+  # ECR Repository for Production
   ECRRepository:
     Type: AWS::ECR::Repository
     Properties:
@@ -55,12 +56,16 @@ Resources:
       ImageScanningConfiguration:
         scanOnPush: true
 
+  # S3 Bucket for Production Artifacts
   PipelineArtifactsBucketProd:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: "data-visualizer-prod-pipeline-artifacts"
       VersioningConfiguration:
         Status: Enabled
+      LoggingConfiguration:
+        DestinationBucketName: !Ref PipelineArtifactsLoggingBucketProd
+        LogFilePrefix: "artifacts-logs"
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -73,6 +78,7 @@ Resources:
       VersioningConfiguration:
         Status: Enabled
 
+  # S3 Bucket Policy
   PipelineArtifactsBucketPolicyProd:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -89,52 +95,7 @@ Resources:
               Bool:
                 aws:SecureTransport: false
 
-  DataVisualiserProdRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: "Data-Visualiser-Prod-Role"
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: 
-                - codepipeline.amazonaws.com
-            Action: "sts:AssumeRole"
-      Path: "/"
-      Policies:
-        - PolicyName: "DataVisualiserProd-Policy"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - "s3:PutObject"
-                  - "s3:GetObject"
-                  - "s3:GetBucketLocation"
-                Resource: !Sub "arn:aws:s3:::${PipelineArtifactsBucketProd}/*"
-              - Effect: Allow
-                Action:
-                  - "codebuild:BatchGetBuilds"
-                  - "codebuild:StartBuild"
-                Resource: "*"
-              - Effect: Allow
-                Action:
-                  - "iam:PassRole"
-                  - "sts:AssumeRole"
-                Resource: "*"
-              - Effect: Allow
-                Action:
-                  - "cloudformation:CreateStack"
-                  - "cloudformation:DescribeStacks"
-                  - "cloudformation:UpdateStack"
-                  - "cloudformation:DeleteStack"
-                Resource: "*"
-              - Effect: Allow
-                Action: 
-                  - "apprunner:*"
-                Resource: "*"
-
+  # IAM Role for CodeBuild in Production
   CodeBuildServiceRoleProd:
     Type: AWS::IAM::Role
     Properties:
@@ -184,7 +145,8 @@ Resources:
                   - "ecr:InitiateLayerUpload"
                 Resource: "*"
 
-  CodeBuildProjectBuildAndPush:
+  # CodeBuild Project for Docker Image Build and Push
+  CodeBuildProjectBuildAndPushProd:
     Type: AWS::CodeBuild::Project
     Properties:
       Name: "DataVisualizerProd-CodeBuildBuildAndPush"
@@ -224,13 +186,76 @@ Resources:
               - '**/*'
       ServiceRole: !GetAtt CodeBuildServiceRoleProd.Arn
 
-  CodePipelineProd:
+  # App Runner VPC Connector for Production
+  VPCConnectorProd:
+    Type: AWS::AppRunner::VpcConnector
+    Properties:
+      VpcConnectorName: "DataVisualizerProd-VpcConnector"
+      Subnets:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroups:
+        - !Ref RdsSecurityGroupId
+
+  # App Runner Service for Production
+  AppRunnerServiceProd:
+    Type: AWS::AppRunner::Service
+    Properties:
+      SourceConfiguration:
+        ImageRepository:
+          ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}:${EcrImageTag}"
+          ImageConfiguration:
+            Port: "8000"
+          ImageRepositoryType: ECR
+        AutoDeploymentsEnabled: true
+      InstanceConfiguration:
+        Cpu: "1024"
+        Memory: "2048"
+      NetworkConfiguration:
+        EgressConfiguration:
+          EgressType: VPC
+          VpcConnectorArn: !Ref VPCConnectorProd
+      ServiceName: "DataVisualizerProdAppRunnerService"
+
+  # CodePipeline IAM Role for Production
+  CodePipelineServiceRoleProd:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: "DataVisualiserProd-CodePipelineServiceRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                - codepipeline.amazonaws.com
+            Action: "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: "DataVisualiserProd-CodePipelineAccessPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                  - "s3:GetBucketLocation"
+                Resource: !Sub "arn:aws:s3:::${PipelineArtifactsBucketProd}/*"
+              - Effect: Allow
+                Action:
+                  - "codebuild:BatchGetBuilds"
+                  - "codebuild:StartBuild"
+                Resource: "*"
+
+  # CodePipeline for Production
+  PipelineProd:
     Type: AWS::CodePipeline::Pipeline
     Properties:
       ArtifactStore:
         Location: !Ref PipelineArtifactsBucketProd
         Type: S3
-      RoleArn: !GetAtt DataVisualiserProdRole.Arn
+      RoleArn: !GetAtt CodePipelineServiceRoleProd.Arn
       RestartExecutionOnUpdate: true
       Stages:
         - Name: Source
@@ -260,7 +285,7 @@ Resources:
               InputArtifacts:
                 - Name: SourceCodeAsZip
               Configuration:
-                ProjectName: !Ref CodeBuildProjectBuildAndPush
+                ProjectName: !Ref CodeBuildProjectBuildAndPushProd
               RunOrder: 1
             - Name: PrepareCloudFormation
               ActionTypeId:
@@ -273,7 +298,7 @@ Resources:
               OutputArtifacts:
                 - Name: AppRunnerCloudFormation
               Configuration:
-                ProjectName: !Ref CodeBuildProjectBuildAndPush
+                ProjectName: !Ref CodeBuildProjectBuildAndPushProd
               RunOrder: 2
 
         - Name: AppRunnerDeploy
@@ -288,7 +313,7 @@ Resources:
                 - Name: AppRunnerCloudFormation
               Configuration:
                 ActionMode: REPLACE_ON_FAILURE
-                RoleArn: !GetAtt DataVisualiserProdRole.Arn
+                RoleArn: !GetAtt CodePipelineServiceRoleProd.Arn
                 StackName: !Sub "${AWS::StackName}-AppRunnerService"
                 TemplatePath: AppRunnerCloudFormation::template.yml
               RunOrder: 1
