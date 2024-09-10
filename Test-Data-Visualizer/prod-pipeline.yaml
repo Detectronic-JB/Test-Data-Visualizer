@@ -55,44 +55,87 @@ Resources:
       ImageScanningConfiguration:
         scanOnPush: true
 
-  PipelineArtifactsBucket:
+  PipelineArtifactsBucketProd:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: "data-visualizer-prod-pipeline-artifacts"
       VersioningConfiguration:
         Status: Enabled
-      LoggingConfiguration:
-        DestinationBucketName: !Ref PipelineArtifactsLoggingBucket
-        LogFilePrefix: "artifacts-logs"
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
 
-  PipelineArtifactsLoggingBucket:
+  PipelineArtifactsLoggingBucketProd:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: "data-visualizer-prod-pipeline-logs"
       VersioningConfiguration:
         Status: Enabled
 
-  PipelineArtifactsBucketPolicy:
+  PipelineArtifactsBucketPolicyProd:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket: !Ref PipelineArtifactsBucket
+      Bucket: !Ref PipelineArtifactsBucketProd
       PolicyDocument:
         Statement:
-          - Effect: "Deny"
+          - Effect: Deny
             Action: "s3:*"
             Principal: "*"
             Resource:
-              - !Sub "${PipelineArtifactsBucket.Arn}/*"
-              - !GetAtt PipelineArtifactsBucket.Arn
+              - !Sub "${PipelineArtifactsBucketProd.Arn}/*"
+              - !GetAtt PipelineArtifactsBucketProd.Arn
             Condition:
               Bool:
                 aws:SecureTransport: false
 
-  CodeBuildServiceRole:
+  DataVisualiserProdRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: "Data-Visualiser-Prod-Role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                - codepipeline.amazonaws.com
+            Action: "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: "DataVisualiserProd-Policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                  - "s3:GetBucketLocation"
+                Resource: !Sub "arn:aws:s3:::${PipelineArtifactsBucketProd}/*"
+              - Effect: Allow
+                Action:
+                  - "codebuild:BatchGetBuilds"
+                  - "codebuild:StartBuild"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "iam:PassRole"
+                  - "sts:AssumeRole"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "cloudformation:CreateStack"
+                  - "cloudformation:DescribeStacks"
+                  - "cloudformation:UpdateStack"
+                  - "cloudformation:DeleteStack"
+                Resource: "*"
+              - Effect: Allow
+                Action: 
+                  - "apprunner:*"
+                Resource: "*"
+
+  CodeBuildServiceRoleProd:
     Type: AWS::IAM::Role
     Properties:
       RoleName: "DataVisualizerProd-CodeBuildServiceRole"
@@ -179,38 +222,15 @@ Resources:
           artifacts:
             files:
               - '**/*'
-      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      ServiceRole: !GetAtt CodeBuildServiceRoleProd.Arn
 
-  CodeBuildProjectPrepareCloudFormation:
-    Type: AWS::CodeBuild::Project
-    Properties:
-      Name: "DataVisualizerProd-PrepareCloudFormation"
-      Artifacts:
-        Type: CODEPIPELINE
-      Environment:
-        ComputeType: BUILD_GENERAL1_SMALL
-        Image: aws/codebuild/standard:5.0
-        Type: LINUX_CONTAINER
-      Source:
-        Type: CODEPIPELINE
-        BuildSpec: |
-          version: 0.2
-          phases:
-            build:
-              commands:
-                - echo Preparing CloudFormation templates...
-          artifacts:
-            files:
-              - '**/*'
-      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
-
-  Pipeline:
+  CodePipelineProd:
     Type: AWS::CodePipeline::Pipeline
     Properties:
       ArtifactStore:
-        Location: !Ref PipelineArtifactsBucket
+        Location: !Ref PipelineArtifactsBucketProd
         Type: S3
-      RoleArn: arn:aws:iam::507038060985:role/Data-Visualiser-Prod-Role
+      RoleArn: !GetAtt DataVisualiserProdRole.Arn
       RestartExecutionOnUpdate: true
       Stages:
         - Name: Source
@@ -253,7 +273,7 @@ Resources:
               OutputArtifacts:
                 - Name: AppRunnerCloudFormation
               Configuration:
-                ProjectName: !Ref CodeBuildProjectPrepareCloudFormation
+                ProjectName: !Ref CodeBuildProjectBuildAndPush
               RunOrder: 2
 
         - Name: AppRunnerDeploy
@@ -268,8 +288,7 @@ Resources:
                 - Name: AppRunnerCloudFormation
               Configuration:
                 ActionMode: REPLACE_ON_FAILURE
-                RoleArn: arn:aws:iam::507038060985:role/Data-Visualiser-Prod-Role
+                RoleArn: !GetAtt DataVisualiserProdRole.Arn
                 StackName: !Sub "${AWS::StackName}-AppRunnerService"
                 TemplatePath: AppRunnerCloudFormation::template.yml
               RunOrder: 1
-
