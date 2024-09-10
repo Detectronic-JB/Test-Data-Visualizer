@@ -29,9 +29,9 @@ Resources:
                 Value: !Ref AWS::Region
             RuntimeEnvironmentSecrets:
               - Name: RDS_CREDS_JSON
-                Value: !Ref RdsCredentialsArn
+                Value: "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/RdsCredentials-2Twah"
               - Name: SECRET_KEY
-                Value: !Ref SecretKeySecretArn
+                Value: "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/Secret-Prod-nelNEq"
 
   AppRunnerInstanceRole:
     Type: AWS::IAM::Role
@@ -46,6 +46,17 @@ Resources:
             Action: 'sts:AssumeRole'
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
+      Policies:
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'secretsmanager:GetSecretValue'
+                Resource:
+                  - "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/RdsCredentials-2Twah"
+                  - "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/Secret-Prod-nelNEq"
 
   AppRunnerEcrAccessRole:
     Type: AWS::IAM::Role
@@ -71,9 +82,4 @@ Resources:
       SecurityGroups: 
         - !Ref RdsSecurityGroupId
 
-Parameters:
-  # ... (other parameters from the previous template)
-
-  RdsCredentialsArn:
-    Type: String
-    Default: "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/RdsCredentials-Prod"
+# ... (rest of the template)
