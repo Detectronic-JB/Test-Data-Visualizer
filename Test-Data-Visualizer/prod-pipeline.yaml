@@ -1,0 +1,51 @@
+# Production CloudFormation Template
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  This template deploys a production CodePipeline with its required resources for a production environment, including App Runner, ECR access, and Docker image configuration.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: "Production"
+  
+  GitBranch:
+    Type: String
+    Default: "main"
+  
+  FullRepositoryId:
+    Type: String
+    Default: "prod-app-repo"
+
+  CodeStarConnectionArn:
+    Type: String
+    Default: "arn:aws:codestar-connections:eu-west-1:507038060985:connection/7fba6c00-7d2d-4878-8ac6-13f47013dfa7" # Update with your production ARN
+
+  EcrImageTag:
+    Type: String
+    Default: "latest"
+
+  VPCId:
+    Type: String
+    Default: "vpc-0245ba2f2ade8956e"
+
+  PrivateSubnet1:
+    Type: String
+    Default: "subnet-0f0c94bd7e0ca2978"
+
+  PrivateSubnet2:
+    Type: String
+    Default: "subnet-0cf361de1a4beb167"
+
+  RdsInstanceArn:
+    Type: String
+    Default: "arn:aws:rds:eu-west-1:507038060985:db:datavis-prod"
+
+  RdsSecurityGroupId:
+    Type: String
+    Default: "sg-055d7189efc3e6fa9"
+
+  SecretKeySecretArn:
+    Type: String
+    Default: "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/Secret-Prod-nelNEq"
+
+# (Include the rest of the CloudFormation template here)
