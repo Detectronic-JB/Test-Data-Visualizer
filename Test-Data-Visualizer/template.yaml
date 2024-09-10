@@ -1,0 +1,135 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  This template sets up a testing pipeline using AWS CodePipeline, CodeBuild, and S3 for a testing environment.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: "Testing"
+  
+  GitBranch:
+    Type: String
+    Default: "main"
+  
+  FullRepositoryId:
+    Type: String
+    Default: "my-app-repo"
+
+  CodeStarConnectionArn:
+    Type: String
+    Default: "arn:aws:codestar-connections:eu-west-1:123456789012:connection/abcdefg"
+
+Resources:
+  # S3 Bucket for Pipeline Artifacts
+  PipelineArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: "data-visualizer-test-pipeline-artifacts"
+      VersioningConfiguration:
+        Status: Enabled
+
+  # IAM Role for CodeBuild
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: "DataVisualizerTest-CodeBuildServiceRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: "CodeBuildPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+
+  # CodeBuild Project
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: "DataVisualizerTest-BuildProject"
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: REPOSITORY_URI
+            Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}"
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            pre_build:
+              commands:
+                - echo "Logging in to Amazon ECR..."
+                - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
+            build:
+              commands:
+                - echo "Building the Docker image..."
+                - docker build -t $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION .
+                - docker tag $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION $REPOSITORY_URI:latest
+            post_build:
+              commands:
+                - echo "Pushing the Docker image..."
+                - docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
+                - docker push $REPOSITORY_URI:latest
+          artifacts:
+            files:
+              - '**/*'
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+
+  # CodePipeline
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location: !Ref PipelineArtifactsBucket
+        Type: S3
+      RoleArn: arn:aws:iam::123456789012:role/CodePipelineRole
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceCodeRepo
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: "1"
+              Configuration:
+                ConnectionArn: !Ref CodeStarConnectionArn
+                FullRepositoryId: !Ref FullRepositoryId
+                BranchName: !Ref GitBranch
+              OutputArtifacts:
+                - Name: SourceCodeAsZip
+              RunOrder: 1
+        
+        - Name: Build
+          Actions:
+            - Name: BuildContainerImage
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              InputArtifacts:
+                - Name: SourceCodeAsZip
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              RunOrder: 1
+
+Outputs:
+  PipelineId:
+    Value: !Ref Pipeline
+    Description: The CodePipeline created for this environment.
