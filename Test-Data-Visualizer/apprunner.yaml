@@ -1,0 +1,28 @@
+version: 1.0
+runtime: python3  # Adjust this to your application's runtime
+
+build:
+  commands:
+    - echo "Installing dependencies..."
+    - pip install -r requirements.txt
+    - |
+      if [ "$APP_ENV" = "test" ]; then
+        echo "Installing test dependencies..."
+        pip install -r test-requirements.txt
+      fi
+
+run:
+  command: |
+    if [ "$APP_ENV" = "test" ]; then
+      echo "Running in test environment"
+      python run_tests.py
+    else
+      echo "Running in production environment"
+      python app.py
+    fi
+  network:
+    port: 8080
+
+env:
+  - name: APP_ENV
+    value: prod
