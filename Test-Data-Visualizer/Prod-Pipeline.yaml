@@ -185,7 +185,7 @@ Resources:
               - '**/*'
       ServiceRole: !GetAtt CodeBuildServiceRoleProd.Arn
 
-  # CodeBuild Project for Preparing CloudFormation (Missing Resource Added)
+  # CodeBuild Project for Preparing CloudFormation
   CodeBuildProjectPrepareCloudFormationProd:
     Type: AWS::CodeBuild::Project
     Properties:
@@ -209,6 +209,36 @@ Resources:
               - '**/*'
       ServiceRole: !GetAtt CodeBuildServiceRoleProd.Arn
 
+  # New IAM Role for CodePipeline
+  DataVisualizerRoleProd:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: "data-visualizer-role-prod"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+                - cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: CodePipelineAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:*'
+                  - 'codecommit:*'
+                  - 'codebuild:*'
+                  - 'cloudformation:*'
+                  - 'iam:PassRole'
+                  - 'ecr:*'
+                Resource: '*'
+
   # CodePipeline Configuration
   PipelineProd:
     Type: AWS::CodePipeline::Pipeline
@@ -216,7 +246,7 @@ Resources:
       ArtifactStore:
         Location: !Ref PipelineArtifactsBucketProd
         Type: S3
-      RoleArn: arn:aws:iam::507038060985:role/Data-Visualiser-Prod-Role
+      RoleArn: !GetAtt DataVisualizerRoleProd.Arn
       RestartExecutionOnUpdate: true
       Stages:
         - Name: Source
@@ -274,7 +304,7 @@ Resources:
                 - Name: AppRunnerCloudFormation
               Configuration:
                 ActionMode: REPLACE_ON_FAILURE
-                RoleArn: arn:aws:iam::507038060985:role/Data-Visualiser-Prod-Role
+                RoleArn: !GetAtt DataVisualizerRoleProd.Arn
                 StackName: !Sub "${AWS::StackName}-AppRunnerService"
                 TemplatePath: AppRunnerCloudFormation::template.yml
               RunOrder: 1
