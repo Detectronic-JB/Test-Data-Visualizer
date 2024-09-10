@@ -17,7 +17,7 @@ Parameters:
 
   CodeStarConnectionArn:
     Type: String
-    Default: "arn:aws:codestar-connections:eu-west-1:507038060985:connection/your_prod_connection_arn"  # Update with production ARN
+    Default: "arn:aws:codestar-connections:eu-west-1:507038060985:connection/your_prod_connection_arn"
 
   EcrImageTag:
     Type: String
@@ -25,15 +25,15 @@ Parameters:
 
   VPCId:
     Type: String
-    Default: "vpc-0245ba2f2ade8956e"  # Update with your production VPC ID
+    Default: "vpc-0245ba2f2ade8956e"
 
   PrivateSubnet1:
     Type: String
-    Default: "subnet-0f0c94bd7e0ca2978"  # Update with your production private subnet 1
+    Default: "subnet-0f0c94bd7e0ca2978"
 
   PrivateSubnet2:
     Type: String
-    Default: "subnet-0cf361de1a4beb167"  # Update with your production private subnet 2
+    Default: "subnet-0cf361de1a4beb167"
 
   RdsInstanceArn:
     Type: String
@@ -145,46 +145,28 @@ Resources:
                   - "ecr:InitiateLayerUpload"
                 Resource: "*"
 
-  # CodeBuild Project for Docker Image Build and Push
-  CodeBuildProjectBuildAndPushProd:
-    Type: AWS::CodeBuild::Project
+  # App Runner IAM Role for ECR Access
+  AppRunnerAccessRoleProd:
+    Type: AWS::IAM::Role
     Properties:
-      Name: "DataVisualizerProd-CodeBuildBuildAndPush-v2"  # Renamed to avoid conflict
-      Artifacts:
-        Type: CODEPIPELINE
-      Environment:
-        ComputeType: BUILD_GENERAL1_SMALL
-        Image: aws/codebuild/standard:5.0
-        Type: LINUX_CONTAINER
-        PrivilegedMode: true  # Required for Docker build
-        EnvironmentVariables:
-          - Name: REPOSITORY_URI
-            Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}"
-      Source:
-        Type: CODEPIPELINE
-        BuildSpec: |
-          version: 0.2
-          phases:
-            pre_build:
-              commands:
-                - echo Logging in to Amazon ECR...
-                - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
-            build:
-              commands:
-                - echo Build started on `date`
-                - echo Building the Docker image...
-                - docker build -t $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION .
-                - docker tag $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION $REPOSITORY_URI:latest
-            post_build:
-              commands:
-                - echo Pushing the Docker image...
-                - docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
-                - docker push $REPOSITORY_URI:latest
-                - echo Build completed on `date`
-          artifacts:
-            files:
-              - '**/*'
-      ServiceRole: !GetAtt CodeBuildServiceRoleProd.Arn
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apprunner.amazonaws.com
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "AppRunnerECRAccessPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ecr:GetDownloadUrlForLayer"
+                  - "ecr:BatchGetImage"
+                  - "ecr:GetAuthorizationToken"
+                Resource: "*"
 
   # App Runner VPC Connector for Production
   VPCConnectorProd:
@@ -192,10 +174,10 @@ Resources:
     Properties:
       VpcConnectorName: "DataVisualizerProd-VpcConnector"
       Subnets:
-        - !Ref PrivateSubnet1  # Ensure this is a valid private subnet
-        - !Ref PrivateSubnet2  # Ensure this is a valid private subnet
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
       SecurityGroups:
-        - !Ref RdsSecurityGroupId  # Ensure this security group allows necessary traffic
+        - !Ref RdsSecurityGroupId
 
   # App Runner Service for Production
   AppRunnerServiceProd:
@@ -207,6 +189,8 @@ Resources:
           ImageConfiguration:
             Port: "8000"
           ImageRepositoryType: ECR
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt AppRunnerAccessRoleProd.Arn  # Fix for ECR authentication
         AutoDeploymentsEnabled: true
       InstanceConfiguration:
         Cpu: "1024"
