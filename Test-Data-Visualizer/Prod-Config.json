@@ -1,0 +1,25 @@
+{
+    "Parameters": {
+        "Environment": "Production",
+        "GitBranch": "main",
+        "FullRepositoryId": "prod-app-repo",
+        "CodeStarConnectionArn": "arn:aws:codestar-connections:eu-west-1:507038060985:connection/production-connection-arn",
+        "EcrImageTag": "latest",
+        "VPCId": "vpc-0245ba2f2ade8956e",
+        "PrivateSubnet1": "subnet-0f0c94bd7e0ca2978",
+        "PrivateSubnet2": "subnet-0c361de1a4beb167",
+        "RdsInstanceArn": "arn:aws:rds:eu-west-1:507038060985:db:datavis-prod",
+        "RdsSecurityGroupId": "sg-055d7189efc3e6fa9",
+        "SecretKeySecretArn": "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/Secret-Prod"
+    },
+    "StackPolicy": {
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "NotAction": "Update:Delete",
+                "Principal": "*",
+                "Resource": "*"
+            }
+        ]
+    }
+}
