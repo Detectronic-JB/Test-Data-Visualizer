@@ -78,7 +78,7 @@ Resources:
       VersioningConfiguration:
         Status: Enabled
 
-  # S3 Bucket Policy
+  # S3 Bucket Policy for Production Artifacts
   PipelineArtifactsBucketPolicyProd:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -149,7 +149,7 @@ Resources:
   CodeBuildProjectBuildAndPushProd:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: "DataVisualizerProd-CodeBuildBuildAndPush"
+      Name: "DataVisualizerProd-CodeBuildBuildAndPush-v2"  # Renamed to avoid conflict
       Artifacts:
         Type: CODEPIPELINE
       Environment:
@@ -192,10 +192,10 @@ Resources:
     Properties:
       VpcConnectorName: "DataVisualizerProd-VpcConnector"
       Subnets:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
+        - !Ref PrivateSubnet1  # Ensure this is a valid private subnet
+        - !Ref PrivateSubnet2  # Ensure this is a valid private subnet
       SecurityGroups:
-        - !Ref RdsSecurityGroupId
+        - !Ref RdsSecurityGroupId  # Ensure this security group allows necessary traffic
 
   # App Runner Service for Production
   AppRunnerServiceProd:
