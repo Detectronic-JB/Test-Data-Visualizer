@@ -1,85 +1,31 @@
-Resources:
-  # ... (other resources from the previous template)
-
-  AppRunnerService:
-    Type: AWS::AppRunner::Service
-    Properties:
-      ServiceName: DataVisualiserProd-AppRunnerService
-      InstanceConfiguration:
-        InstanceRoleArn: !GetAtt AppRunnerInstanceRole.Arn
-      NetworkConfiguration:
-        EgressConfiguration:
-          EgressType: VPC
-          VpcConnectorArn: !Ref AppRunnerVpcConnector
-        IngressConfiguration:
-          IsPubliclyAccessible: true
-      SourceConfiguration:
-        AuthenticationConfiguration:
-          AccessRoleArn: !GetAtt AppRunnerEcrAccessRole.Arn
-        AutoDeploymentsEnabled: true
-        ImageRepository:
-          ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepositoryProd}:latest"
-          ImageRepositoryType: ECR
-          ImageConfiguration:
-            Port: 8080
-            RuntimeEnvironmentVariables:
-              - Name: PORT
-                Value: '8080'
-              - Name: AWS_REGION
-                Value: !Ref AWS::Region
-            RuntimeEnvironmentSecrets:
-              - Name: RDS_CREDS_JSON
-                Value: "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/RdsCredentials-2Twah"
-              - Name: SECRET_KEY
-                Value: "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/Secret-Prod-nelNEq"
-
-  AppRunnerInstanceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - tasks.apprunner.amazonaws.com
-            Action: 'sts:AssumeRole'
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
-      Policies:
-        - PolicyName: SecretsManagerAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 'secretsmanager:GetSecretValue'
-                Resource:
-                  - "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/RdsCredentials-2Twah"
-                  - "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/Secret-Prod-nelNEq"
-
-  AppRunnerEcrAccessRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - build.apprunner.amazonaws.com
-            Action: 'sts:AssumeRole'
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
-
-  AppRunnerVpcConnector:
-    Type: AWS::AppRunner::VpcConnector
-    Properties:
-      VpcConnectorName: ProdRdsConnector
-      Subnets: 
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-      SecurityGroups: 
-        - !Ref RdsSecurityGroupId
-
-# ... (rest of the template)
+AppRunnerService:
+  Type: AWS::AppRunner::Service
+  Properties:
+    ServiceName: DataVisualiserProd-AppRunnerService
+    InstanceConfiguration:
+      InstanceRoleArn: !GetAtt AppRunnerInstanceRole.Arn
+    NetworkConfiguration:
+      EgressConfiguration:
+        EgressType: VPC
+        VpcConnectorArn: !Ref AppRunnerVpcConnector
+      IngressConfiguration:
+        IsPubliclyAccessible: true
+    SourceConfiguration:
+      AuthenticationConfiguration:
+        AccessRoleArn: !GetAtt AppRunnerEcrAccessRole.Arn
+      AutoDeploymentsEnabled: true
+      ImageRepository:
+        ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}:latest"
+        ImageRepositoryType: ECR
+      ImageConfiguration:
+        Port: 8080
+        RuntimeEnvironmentVariables:
+          - Name: PORT
+            Value: '8080'
+          - Name: AWS_REGION
+            Value: !Ref AWS::Region
+        RuntimeEnvironmentSecrets:
+          - Name: RDS_CREDS_JSON
+            Value: "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/RdsCredentials-2Twah"
+          - Name: SECRET_KEY
+            Value: "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/Secret-Prod-nelNEq"
