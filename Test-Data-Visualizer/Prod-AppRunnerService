@@ -32,7 +32,38 @@ Resources:
                 Action: 
                   - "secretsmanager:GetSecretValue"
                 Resource: 
-                  - !Ref SecretKeySecretArn
+                  - !Ref SecretKeySecretArn  # Reference to the SecretKeySecretArn parameter
                   - "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/*"
 
-  # (Other resources follow as per your template)
+  # App Runner Service Definition
+  AppRunnerService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: DataVisualiserProd-AppRunnerService
+      InstanceConfiguration:
+        InstanceRoleArn: !GetAtt AppRunnerInstanceRole.Arn  # Reference to the role
+      NetworkConfiguration:
+        EgressConfiguration:
+          EgressType: VPC
+          VpcConnectorArn: !Ref AppRunnerVpcConnector
+        IngressConfiguration:
+          IsPubliclyAccessible: true
+      SourceConfiguration:
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt AppRunnerEcrAccessRole.Arn
+        AutoDeploymentsEnabled: true
+        ImageRepository:
+          ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}:latest"
+          ImageRepositoryType: ECR
+        ImageConfiguration:
+          Port: 8080
+          RuntimeEnvironmentVariables:
+            - Name: PORT
+              Value: '8080'
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+          RuntimeEnvironmentSecrets:
+            - Name: RDS_CREDS_JSON
+              Value: "arn:aws:secretsmanager:eu-west-1:507038060985:secret:DataVisualizer/RdsCredentials-2Twah"
+            - Name: SECRET_KEY
+              Value: !Ref SecretKeySecretArn  # Reference to the SecretKeySecretArn parameter
