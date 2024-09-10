@@ -1,0 +1,26 @@
+{
+    "version": "1.0",
+    "runtime": "nodejs16",
+    "source": {
+      "type": "GITHUB",
+      "repository": "https://github.com/Detectronic-JB/Test-Data-Visualizer.git",
+      "branch": "main"
+    },
+    "build": {
+      "commands": {
+        "install": "npm install",
+        "build": "npm run build"
+      }
+    },
+    "run": {
+      "command": "npm start",
+      "port": 8080
+    },
+    "autoDeploymentsEnabled": true,
+    "environmentVariables": {
+      "NODE_ENV": "development",
+      "APP_ENV": "test",
+      "SERVICE_NAME": "App Runner Test"
+    }
+  }
+  
