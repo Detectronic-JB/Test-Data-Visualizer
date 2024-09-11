@@ -9,15 +9,15 @@ Parameters:
   
   GitBranch:
     Type: String
-    Default: "main"  # Your default branch is "main"
+    Default: "main"
   
   FullRepositoryId:
     Type: String
-    Default: "Detectronic-JB/Test-Data-Visualizer"  # Your correct GitHub repo in format GitHubUsername/RepoName
+    Default: "Detectronic-JB/Test-Data-Visualizer"
 
   CodeStarConnectionArn:
     Type: String
-    Default: "arn:aws:codeconnections:eu-west-1:583261726886:connection/7fba6c00-7d2d-4878-8ac6-13f47013dfa7"
+    Default: "arn:aws:codeconnections:eu-west-1:583261726886:connection/e525dc8c-cd78-462c-b13f-8ed60baa280a"
 
 Resources:
   # S3 Bucket for Pipeline Artifacts
