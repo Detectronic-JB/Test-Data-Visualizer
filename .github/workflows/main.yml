@@ -30,4 +30,4 @@ jobs:
         run: |
           cd Test-Data-Visualizer
           sam build --template-file template.yml
-          sam deploy --template-file template.yml --stack-name DataVisualiserTestPipeline --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --no-fail-on-empty-changeset
+          sam deploy --template-file template.yml --stack-name test-data-visualizer-pipeline --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --no-fail-on-empty-changeset --parameter-overrides UniqueID=$(date +%s)
