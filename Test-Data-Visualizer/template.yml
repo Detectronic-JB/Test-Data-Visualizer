@@ -98,6 +98,7 @@ Resources:
                   - s3:*
                   - codebuild:*
                   - codestar-connections:UseConnection
+                  - codestar-connections:PassConnection
                 Resource: '*'
 
   Pipeline:
