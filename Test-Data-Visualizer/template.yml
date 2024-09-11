@@ -9,11 +9,11 @@ Parameters:
   
   GitBranch:
     Type: String
-    Default: "main"
+    Default: "main"  # Your default branch is "main"
   
   FullRepositoryId:
     Type: String
-    Default: "my-app-repo"
+    Default: "Detectronic-JB/Test-Data-Visualizer"  # Your correct GitHub repo in format GitHubUsername/RepoName
 
   CodeStarConnectionArn:
     Type: String
