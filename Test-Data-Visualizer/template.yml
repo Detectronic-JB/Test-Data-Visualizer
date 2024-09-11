@@ -17,7 +17,7 @@ Parameters:
 
   CodeStarConnectionArn:
     Type: String
-    Default: "arn:aws:codestar-connections:eu-west-1:123456789012:connection/abcdefg"
+    Default: "arn:aws:codeconnections:eu-west-1:583261726886:connection/7fba6c00-7d2d-4878-8ac6-13f47013dfa7"
 
 Resources:
   # S3 Bucket for Pipeline Artifacts
