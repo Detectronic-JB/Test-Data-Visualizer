@@ -17,7 +17,7 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-1
-          role-to-assume: arn:aws:iam::***:role/CloudFormation-DataVisualizerPipeline-Role
+          role-to-assume: arn:aws:iam::583261726886:role/CloudFormation-DataVisualizerPipeline-Role
           role-duration-seconds: 1200
 
       - name: Deploy to AWS
