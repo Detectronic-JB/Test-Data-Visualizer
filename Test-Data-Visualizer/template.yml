@@ -1,70 +1,71 @@
-AWSTemplateFormatVersion: "2010-09-09"
-Description: >
-  This template sets up a testing pipeline using AWS CodePipeline, CodeBuild, and S3 for a testing environment.
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This template sets up a testing pipeline using AWS CodePipeline, CodeBuild,
+  and S3 for a testing environment.'
 
 Parameters:
   Environment:
     Type: String
-    Default: "Testing"
-  
+    Default: Testing
   GitBranch:
     Type: String
-    Default: "main"
-  
+    Default: main
   FullRepositoryId:
     Type: String
-    Default: "Detectronic-JB/Test-Data-Visualizer"
-
+    Default: Detectronic-JB/Test-Data-Visualizer
   CodeStarConnectionArn:
     Type: String
-    Default: "arn:aws:codeconnections:eu-west-1:583261726886:connection/e525dc8c-cd78-462c-b13f-8ed60baa280a"
+    Default: arn:aws:codeconnections:eu-west-1:583261726886:connection/e525dc8c-cd78-462c-b13f-8ed60baa280a
 
 Resources:
-  # S3 Bucket for Pipeline Artifacts
   PipelineArtifactsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "data-visualizer-test-pipeline-artifacts-${AWS::AccountId}"
+      BucketName:
+        Fn::Sub: data-visualizer-test-pipeline-artifacts-${AWS::AccountId}
       VersioningConfiguration:
         Status: Enabled
+    Metadata:
+      SamResourceId: PipelineArtifactsBucket
 
-  # IAM Role for CodeBuild
   CodeBuildServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "DataVisualizerTest-CodeBuildServiceRole-${AWS::AccountId}"
+      RoleName:
+        Fn::Sub: DataVisualizerTest-CodeBuildServiceRole-${AWS::AccountId}
       AssumeRolePolicyDocument:
-        Version: "2012-10-17"
+        Version: '2012-10-17'
         Statement:
-          - Effect: Allow
-            Principal:
-              Service: codebuild.amazonaws.com
-            Action: sts:AssumeRole
+        - Effect: Allow
+          Principal:
+            Service: codebuild.amazonaws.com
+          Action: sts:AssumeRole
       Policies:
-        - PolicyName: "CodeBuildPolicy"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - "logs:CreateLogGroup"
-                  - "logs:CreateLogStream"
-                  - "logs:PutLogEvents"
-                  - "s3:GetObject"
-                  - "s3:PutObject"
-                  - "s3:GetObjectVersion"
-                  - "ecr:GetAuthorizationToken"
-                  - "ecr:BatchCheckLayerAvailability"
-                  - "ecr:GetDownloadUrlForLayer"
-                  - "ecr:BatchGetImage"
-                  - "ecr:PutImage"
-                Resource: "*"
+      - PolicyName: CodeBuildPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - s3:GetObject
+            - s3:PutObject
+            - s3:GetObjectVersion
+            - ecr:GetAuthorizationToken
+            - ecr:BatchCheckLayerAvailability
+            - ecr:GetDownloadUrlForLayer
+            - ecr:BatchGetImage
+            - ecr:PutImage
+            Resource: '*'
+    Metadata:
+      SamResourceId: CodeBuildServiceRole
 
-  # CodeBuild Project
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: !Sub "DataVisualizerTest-BuildProject-${AWS::AccountId}"
+      Name:
+        Fn::Sub: DataVisualizerTest-BuildProject-${AWS::AccountId}
       Artifacts:
         Type: CODEPIPELINE
       Environment:
@@ -72,96 +73,103 @@ Resources:
         Image: aws/codebuild/standard:5.0
         Type: LINUX_CONTAINER
         EnvironmentVariables:
-          - Name: REPOSITORY_URI
-            Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}"
+        - Name: REPOSITORY_URI
+          Value:
+            Fn::Sub: ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}
       Source:
         Type: CODEPIPELINE
-        BuildSpec: |
-          version: 0.2
-          phases:
-            pre_build:
-              commands:
-                - echo "Logging in to Amazon ECR..."
-                - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
-            build:
-              commands:
-                - echo "Building the Docker image..."
-                - docker build -t $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION .
-                - docker tag $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION $REPOSITORY_URI:latest
-            post_build:
-              commands:
-                - echo "Pushing the Docker image..."
-                - docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
-                - docker push $REPOSITORY_URI:latest
-          artifacts:
-            files:
-              - '**/*'
-      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+        BuildSpec: "version: 0.2\nphases:\n  pre_build:\n    commands:\n      - echo\
+          \ \"Logging in to Amazon ECR...\"\n      - aws ecr get-login-password --region\
+          \ $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI\n\
+          \  build:\n    commands:\n      - echo \"Building the Docker image...\"\n\
+          \      - docker build -t $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION\
+          \ .\n      - docker tag $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION\
+          \ $REPOSITORY_URI:latest\n  post_build:\n    commands:\n      - echo \"\
+          Pushing the Docker image...\"\n      - docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION\n\
+          \      - docker push $REPOSITORY_URI:latest\nartifacts:\n  files:\n    -\
+          \ '**/*'\n"
+      ServiceRole:
+        Fn::GetAtt:
+        - CodeBuildServiceRole
+        - Arn
+    Metadata:
+      SamResourceId: CodeBuildProject
 
-  # IAM Role for CodePipeline
   CodePipelineRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "DataVisualizerTest-CodePipelineRole-${AWS::AccountId}"
+      RoleName:
+        Fn::Sub: DataVisualizerTest-CodePipelineRole-${AWS::AccountId}
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Effect: Allow
-            Principal:
-              Service: codepipeline.amazonaws.com
-            Action: sts:AssumeRole
+        - Effect: Allow
+          Principal:
+            Service: codepipeline.amazonaws.com
+          Action: sts:AssumeRole
       Policies:
-        - PolicyName: CodePipelinePolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 's3:*'
-                  - 'codebuild:*'
-                  - 'codestar-connections:UseConnection'
-                Resource: '*'
+      - PolicyName: CodePipelinePolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:*
+            - codebuild:*
+            - codestar-connections:UseConnection
+            Resource: '*'
+    Metadata:
+      SamResourceId: CodePipelineRole
 
-  # CodePipeline
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
       ArtifactStore:
-        Location: !Ref PipelineArtifactsBucket
+        Location:
+          Ref: PipelineArtifactsBucket
         Type: S3
-      RoleArn: !GetAtt CodePipelineRole.Arn
+      RoleArn:
+        Fn::GetAtt:
+        - CodePipelineRole
+        - Arn
       Stages:
-        - Name: Source
-          Actions:
-            - Name: SourceCodeRepo
-              ActionTypeId:
-                Category: Source
-                Owner: AWS
-                Provider: CodeStarSourceConnection
-                Version: "1"
-              Configuration:
-                ConnectionArn: !Ref CodeStarConnectionArn
-                FullRepositoryId: !Ref FullRepositoryId
-                BranchName: !Ref GitBranch
-              OutputArtifacts:
-                - Name: SourceCodeAsZip
-              RunOrder: 1
-        
-        - Name: Build
-          Actions:
-            - Name: BuildContainerImage
-              ActionTypeId:
-                Category: Build
-                Owner: AWS
-                Provider: CodeBuild
-                Version: "1"
-              InputArtifacts:
-                - Name: SourceCodeAsZip
-              Configuration:
-                ProjectName: !Ref CodeBuildProject
-              RunOrder: 1
+      - Name: Source
+        Actions:
+        - Name: SourceCodeRepo
+          ActionTypeId:
+            Category: Source
+            Owner: AWS
+            Provider: CodeStarSourceConnection
+            Version: '2'  # Changed to Version 2 for GitHub Apps
+          Configuration:
+            ConnectionArn:
+              Ref: CodeStarConnectionArn
+            FullRepositoryId:
+              Ref: FullRepositoryId
+            BranchName:
+              Ref: GitBranch
+          OutputArtifacts:
+          - Name: SourceCodeAsZip
+          RunOrder: 1
+      - Name: Build
+        Actions:
+        - Name: BuildContainerImage
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Provider: CodeBuild
+            Version: '1'
+          InputArtifacts:
+          - Name: SourceCodeAsZip
+          Configuration:
+            ProjectName:
+              Ref: CodeBuildProject
+          RunOrder: 1
+    Metadata:
+      SamResourceId: Pipeline
 
 Outputs:
   PipelineId:
-    Value: !Ref Pipeline
+    Value:
+      Ref: Pipeline
     Description: The CodePipeline created for this environment.
