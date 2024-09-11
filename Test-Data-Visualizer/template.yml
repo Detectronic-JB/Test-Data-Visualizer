@@ -24,7 +24,7 @@ Resources:
   PipelineArtifactsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: "data-visualizer-test-pipeline-artifacts"
+      BucketName: !Sub "data-visualizer-test-pipeline-artifacts-${AWS::AccountId}"
       VersioningConfiguration:
         Status: Enabled
 
@@ -32,7 +32,7 @@ Resources:
   CodeBuildServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: "DataVisualizerTest-CodeBuildServiceRole"
+      RoleName: !Sub "DataVisualizerTest-CodeBuildServiceRole-${AWS::AccountId}"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -50,13 +50,21 @@ Resources:
                   - "logs:CreateLogGroup"
                   - "logs:CreateLogStream"
                   - "logs:PutLogEvents"
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                  - "s3:GetObjectVersion"
+                  - "ecr:GetAuthorizationToken"
+                  - "ecr:BatchCheckLayerAvailability"
+                  - "ecr:GetDownloadUrlForLayer"
+                  - "ecr:BatchGetImage"
+                  - "ecr:PutImage"
                 Resource: "*"
 
   # CodeBuild Project
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: "DataVisualizerTest-BuildProject"
+      Name: !Sub "DataVisualizerTest-BuildProject-${AWS::AccountId}"
       Artifacts:
         Type: CODEPIPELINE
       Environment:
@@ -90,6 +98,29 @@ Resources:
               - '**/*'
       ServiceRole: !GetAtt CodeBuildServiceRole.Arn
 
+  # IAM Role for CodePipeline
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodePipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:*'
+                  - 'codebuild:*'
+                  - 'codestar-connections:UseConnection'
+                Resource: '*'
+
   # CodePipeline
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
@@ -97,7 +128,7 @@ Resources:
       ArtifactStore:
         Location: !Ref PipelineArtifactsBucket
         Type: S3
-      RoleArn: arn:aws:iam::123456789012:role/CodePipelineRole
+      RoleArn: !GetAtt CodePipelineRole.Arn
       Stages:
         - Name: Source
           Actions:
