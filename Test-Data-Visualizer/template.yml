@@ -1,80 +1,167 @@
-name: Deploy to AWS
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This template sets up a testing pipeline using AWS CodePipeline, CodeBuild, and S3 for a testing environment.'
 
-on:
-  push:
-    branches:
-      - main
+Parameters:
+  Environment:
+    Type: String
+    Default: Testing
+  GitBranch:
+    Type: String
+    Default: main
+  FullRepositoryId:
+    Type: String
+    Default: Detectronic-JB/Test-Data-Visualizer
+  CodeStarConnectionArn:
+    Type: String
+    Default: arn:aws:codeconnections:eu-west-1:583261726886:connection/3db06b73-3b2c-4e00-89be-c8040fccfd57
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
+Resources:
+  PipelineArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "dataviz-pipeline-${AWS::AccountId}-${AWS::Region}"
+      VersioningConfiguration:
+        Status: Enabled
+    Metadata:
+      SamResourceId: PipelineArtifactsBucket
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-west-1
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "DataVisualizerTest-CodeBuildRole-${AWS::AccountId}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:GetObjectVersion
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:PutImage
+                Resource: '*'
+    Metadata:
+      SamResourceId: CodeBuildServiceRole
 
-      - name: Deploy to AWS
-        run: |
-          cd Test-Data-Visualizer
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "DataVisualizerTest-BuildProject-${AWS::AccountId}"
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: REPOSITORY_URI
+            Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}"
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            pre_build:
+              commands:
+                - echo "Logging in to Amazon ECR..."
+                - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
+            build:
+              commands:
+                - echo "Building the Docker image..."
+                - docker build -t $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION .
+                - docker tag $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION $REPOSITORY_URI:latest
+            post_build:
+              commands:
+                - echo "Pushing the Docker image..."
+                - docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
+                - docker push $REPOSITORY_URI:latest
+          artifacts:
+            files:
+              - '**/*'
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+    Metadata:
+      SamResourceId: CodeBuildProject
 
-          # Function to check the status of the CloudFormation stack
-          check_stack_status() {
-            aws cloudformation describe-stacks --stack-name "test-data-visualizer-pipeline" --query "Stacks[0].StackStatus" --output text 2>/dev/null || echo "STACK_NOT_FOUND"
-          }
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "DataVisualizerTest-CodePipelineRole-${AWS::AccountId}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodePipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                  - codebuild:*
+                  - codestar-connections:UseConnection
+                Resource: '*'
+    Metadata:
+      SamResourceId: CodePipelineRole
 
-          # Function to handle stack deletion
-          delete_stack() {
-            echo "Stack exists in a failed state. Deleting stack..."
-            aws cloudformation delete-stack --stack-name "test-data-visualizer-pipeline"
-            echo "Waiting for stack deletion to complete..."
-            aws cloudformation wait stack-delete-complete --stack-name "test-data-visualizer-pipeline"
-            echo "Stack deleted successfully"
-          }
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location: !Ref PipelineArtifactsBucket
+        Type: S3
+      RoleArn: !GetAtt CodePipelineRole.Arn
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceCodeRepo
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: '2'
+              Configuration:
+                ConnectionArn: !Ref CodeStarConnectionArn
+                FullRepositoryId: !Ref FullRepositoryId
+                BranchName: !Ref GitBranch
+              OutputArtifacts:
+                - Name: SourceCodeAsZip
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: BuildContainerImage
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              InputArtifacts:
+                - Name: SourceCodeAsZip
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              RunOrder: 1
+    Metadata:
+      SamResourceId: Pipeline
 
-          # Check initial stack status
-          STACK_STATUS=$(check_stack_status)
-          echo "Initial stack status: $STACK_STATUS"
-
-          # If stack exists and is in a failed or incomplete state, delete it
-          if [[ "$STACK_STATUS" != "STACK_NOT_FOUND" && "$STACK_STATUS" != "CREATE_COMPLETE" && "$STACK_STATUS" != "UPDATE_COMPLETE" ]]; then
-            delete_stack
-          else
-            echo "Stack does not exist or is in a good state, proceeding with deployment."
-          fi
-
-          # Start building the SAM application
-          echo "Building SAM application..."
-          if ! sam build --template-file template.yml; then
-            echo "SAM build failed."
-            exit 1
-          fi
-
-          # Deploy the SAM application
-          echo "Deploying SAM application..."
-          if ! sam deploy --template-file template.yml \
-            --stack-name "test-data-visualizer-pipeline" \
-            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-            --no-fail-on-empty-changeset \
-            --parameter-overrides UniqueID="$(date +%s)" \
-            --debug; then
-            echo "Deployment failed. Fetching CloudFormation events for debugging..."
-            aws cloudformation describe-stack-events --stack-name "test-data-visualizer-pipeline" --query "StackEvents[?ResourceStatus=='CREATE_FAILED'].{LogicalResourceId:LogicalResourceId,ResourceStatusReason:ResourceStatusReason}"
-            exit 1
-          fi
-
-          # Check final stack status after deployment
-          FINAL_STATUS=$(check_stack_status)
-          echo "Final stack status: $FINAL_STATUS"
-
-          # Validate final stack status
-          if [[ "$FINAL_STATUS" != "CREATE_COMPLETE" && "$FINAL_STATUS" != "UPDATE_COMPLETE" ]]; then
-            echo "Deployment failed. Investigate CloudFormation events for more details."
-            exit 1
-          fi
-
-          echo "Deployment completed successfully."
+Outputs:
+  PipelineId:
+    Value: !Ref Pipeline
+    Description: The CodePipeline created for this environment.
