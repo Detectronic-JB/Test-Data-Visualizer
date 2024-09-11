@@ -1,34 +1,38 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'This template sets up a testing pipeline using AWS CodePipeline, CodeBuild, and S3 for a testing environment.'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  SAM Template for Test-Data-Visualizer
 
 Parameters:
   Environment:
     Type: String
     Default: Testing
+    Description: The environment name for this deployment
   GitBranch:
     Type: String
     Default: main
+    Description: The Git branch to use for the CodePipeline source
   FullRepositoryId:
     Type: String
     Default: Detectronic-JB/Test-Data-Visualizer
+    Description: The full GitHub repository ID (owner/repo)
   CodeStarConnectionArn:
     Type: String
-    Default: arn:aws:codeconnections:eu-west-1:583261726886:connection/3db06b73-3b2c-4e00-89be-c8040fccfd57
+    Default: arn:aws:codestar-connections:eu-west-1:***:connection/3db06b73-3b2c-4e00-89be-c8040fccfd57
+    Description: The ARN of the CodeStar connection to GitHub
 
 Resources:
   PipelineArtifactsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "data-visualizer-test-pipeline-artifacts-${AWS::AccountId}-${AWS::Region}-${AWS::StackName}"
+      BucketName: !Sub "${AWS::StackName}-artifacts-${AWS::AccountId}"
       VersioningConfiguration:
         Status: Enabled
-    Metadata:
-      SamResourceId: PipelineArtifactsBucket
 
   CodeBuildServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "DataVisualizerTest-CodeBuildServiceRole-${AWS::AccountId}"
+      RoleName: !Sub "DataVisualizerTest-CodeBuildServiceRole-${AWS::Region}"
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -55,52 +59,28 @@ Resources:
                   - ecr:BatchGetImage
                   - ecr:PutImage
                 Resource: '*'
-    Metadata:
-      SamResourceId: CodeBuildServiceRole
 
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: !Sub "DataVisualizerTest-BuildProject-${AWS::AccountId}"
+      Name: !Sub "${AWS::StackName}-build-project"
+      Description: CodeBuild project for Test-Data-Visualizer
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
       Artifacts:
         Type: CODEPIPELINE
       Environment:
-        ComputeType: BUILD_GENERAL1_SMALL
-        Image: aws/codebuild/standard:5.0
         Type: LINUX_CONTAINER
-        EnvironmentVariables:
-          - Name: REPOSITORY_URI
-            Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}"
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
       Source:
         Type: CODEPIPELINE
-        BuildSpec: |
-          version: 0.2
-          phases:
-            pre_build:
-              commands:
-                - echo "Logging in to Amazon ECR..."
-                - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
-            build:
-              commands:
-                - echo "Building the Docker image..."
-                - docker build -t $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION .
-                - docker tag $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION $REPOSITORY_URI:latest
-            post_build:
-              commands:
-                - echo "Pushing the Docker image..."
-                - docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
-                - docker push $REPOSITORY_URI:latest
-          artifacts:
-            files:
-              - '**/*'
-      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
-    Metadata:
-      SamResourceId: CodeBuildProject
+        BuildSpec: buildspec.yml
+      TimeoutInMinutes: 10
 
   CodePipelineRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "DataVisualizerTest-CodePipelineRole-${AWS::AccountId}"
+      RoleName: !Sub "DataVisualizerTest-CodePipelineRole-${AWS::Region}"
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -119,49 +99,48 @@ Resources:
                   - codebuild:*
                   - codestar-connections:UseConnection
                 Resource: '*'
-    Metadata:
-      SamResourceId: CodePipelineRole
 
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
-      ArtifactStore:
-        Location: !Ref PipelineArtifactsBucket
-        Type: S3
+      Name: !Sub "${AWS::StackName}-pipeline"
       RoleArn: !GetAtt CodePipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref PipelineArtifactsBucket
       Stages:
         - Name: Source
           Actions:
-            - Name: SourceCodeRepo
+            - Name: SourceAction
               ActionTypeId:
                 Category: Source
                 Owner: AWS
                 Provider: CodeStarSourceConnection
-                Version: '2'
+                Version: '1'
               Configuration:
                 ConnectionArn: !Ref CodeStarConnectionArn
                 FullRepositoryId: !Ref FullRepositoryId
                 BranchName: !Ref GitBranch
               OutputArtifacts:
-                - Name: SourceCodeAsZip
+                - Name: SourceOutput
               RunOrder: 1
         - Name: Build
           Actions:
-            - Name: BuildContainerImage
+            - Name: BuildAction
               ActionTypeId:
                 Category: Build
                 Owner: AWS
                 Provider: CodeBuild
                 Version: '1'
-              InputArtifacts:
-                - Name: SourceCodeAsZip
               Configuration:
                 ProjectName: !Ref CodeBuildProject
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
               RunOrder: 1
-    Metadata:
-      SamResourceId: Pipeline
 
 Outputs:
-  PipelineId:
-    Value: !Ref Pipeline
-    Description: The CodePipeline created for this environment.
+  PipelineUrl:
+    Description: CodePipeline URL
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${Pipeline}/view?region=${AWS::Region}
