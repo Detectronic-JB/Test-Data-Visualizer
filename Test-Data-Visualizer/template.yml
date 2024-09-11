@@ -12,8 +12,8 @@ Parameters:
     Description: The GitHub branch to deploy from
   FullRepositoryId:
     Type: String
-    Default: my-app-repo
-    Description: The full repository ID
+    Default: Detectronic-JB/Test-Data-Visualizer
+    Description: The full GitHub repository ID (GitHub username/repository)
   CodeStarConnectionArn:
     Type: String
     Default: arn:aws:codeconnections:eu-west-1:583261726886:connection/561ae0bc-b2c3-45f3-adb0-dee3386746e4
@@ -26,8 +26,7 @@ Resources:
   PipelineArtifactsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName:
-        Fn::Sub: ${UniqueID}-pipeline-artifacts-${AWS::Region}
+      BucketName: !Sub "${UniqueID}-pipeline-artifacts-${AWS::Region}"
       VersioningConfiguration:
         Status: Enabled
     Metadata:
@@ -36,82 +35,75 @@ Resources:
   CodePipelineRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName:
-        Fn::Sub: ${UniqueID}-CodePipelineRole-${Environment}
+      RoleName: !Sub "${UniqueID}-CodePipelineRole-${Environment}"
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-        - Effect: Allow
-          Principal:
-            Service: codepipeline.amazonaws.com
-          Action: sts:AssumeRole
-      Policies:
-      - PolicyName: CodePipelinePolicy
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
           - Effect: Allow
-            Action:
-            - s3:*
-            - codebuild:*
-            - codestar-connections:UseConnection
-            Resource: '*'
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodePipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                  - codebuild:*
+                  - codestar-connections:UseConnection
+                Resource: "*"
     Metadata:
       SamResourceId: CodePipelineRole
 
   CodeBuildServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName:
-        Fn::Sub: ${UniqueID}-CodeBuildRole-${Environment}
+      RoleName: !Sub "${UniqueID}-CodeBuildRole-${Environment}"
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-        - Effect: Allow
-          Principal:
-            Service: codebuild.amazonaws.com
-          Action: sts:AssumeRole
-      Policies:
-      - PolicyName: CodeBuildPolicy
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
           - Effect: Allow
-            Action:
-            - logs:CreateLogGroup
-            - logs:CreateLogStream
-            - logs:PutLogEvents
-            - s3:GetObject
-            - s3:PutObject
-            - s3:GetObjectVersion
-            - ecr:GetAuthorizationToken
-            - ecr:BatchCheckLayerAvailability
-            - ecr:GetDownloadUrlForLayer
-            - ecr:BatchGetImage
-            - ecr:PutImage
-            Resource: '*'
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:GetObjectVersion
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:PutImage
+                Resource: "*"
     Metadata:
       SamResourceId: CodeBuildServiceRole
 
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name:
-        Fn::Sub: ${UniqueID}-BuildProject-${Environment}
+      Name: !Sub "${UniqueID}-BuildProject-${Environment}"
       Artifacts:
         Type: CODEPIPELINE
-      ServiceRole:
-        Fn::GetAtt:
-        - CodeBuildServiceRole
-        - Arn
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
       Environment:
         Type: LINUX_CONTAINER
         ComputeType: BUILD_GENERAL1_SMALL
         Image: aws/codebuild/standard:5.0
         EnvironmentVariables:
-        - Name: REPOSITORY_URI
-          Value:
-            Fn::Sub: ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}
+          - Name: REPOSITORY_URI
+            Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/my-app-repo"
       Source:
         Type: CODEPIPELINE
         BuildSpec: |
@@ -140,49 +132,40 @@ Resources:
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
-      RoleArn:
-        Fn::GetAtt:
-        - CodePipelineRole
-        - Arn
+      RoleArn: !GetAtt CodePipelineRole.Arn
       Stages:
-      - Name: Source
-        Actions:
-        - Name: SourceCodeRepo
-          ActionTypeId:
-            Category: Source
-            Owner: AWS
-            Provider: CodeStarSourceConnection
-            Version: 1
-          Configuration:
-            ConnectionArn:
-              Ref: CodeStarConnectionArn
-            FullRepositoryId:
-              Ref: FullRepositoryId
-            BranchName:
-              Ref: GitBranch
-          OutputArtifacts:
-          - Name: SourceCodeAsZip
-      - Name: Build
-        Actions:
-        - Name: BuildContainerImage
-          ActionTypeId:
-            Category: Build
-            Owner: AWS
-            Provider: CodeBuild
-            Version: 1
-          Configuration:
-            ProjectName:
-              Ref: CodeBuildProject
-          InputArtifacts:
-          - Name: SourceCodeAsZip
-          OutputArtifacts:
-          - Name: BuiltApp
+        - Name: Source
+          Actions:
+            - Name: SourceCodeRepo
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: 1
+              Configuration:
+                ConnectionArn: !Ref CodeStarConnectionArn
+                FullRepositoryId: !Ref FullRepositoryId
+                BranchName: !Ref GitBranch
+              OutputArtifacts:
+                - Name: SourceCodeAsZip
+        - Name: Build
+          Actions:
+            - Name: BuildContainerImage
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              InputArtifacts:
+                - Name: SourceCodeAsZip
+              OutputArtifacts:
+                - Name: BuiltApp
       ArtifactStore:
         Type: S3
-        Location:
-          Ref: PipelineArtifactsBucket
-      Name:
-        Fn::Sub: ${UniqueID}-pipeline-${Environment}
+        Location: !Ref PipelineArtifactsBucket
+      Name: !Sub "${UniqueID}-pipeline-${Environment}"
       RestartExecutionOnUpdate: true
     Metadata:
       SamResourceId: Pipeline
@@ -190,5 +173,4 @@ Resources:
 Outputs:
   PipelineName:
     Description: Name of the pipeline created
-    Value:
-      Fn::Sub: ${UniqueID}-pipeline-${Environment}
+    Value: !Sub "${UniqueID}-pipeline-${Environment}"
