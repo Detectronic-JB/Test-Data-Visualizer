@@ -4,15 +4,19 @@ Description: CodePipeline for building and deploying the Test Data Visualizer ap
 Parameters:
   Environment:
     Type: String
-    Description: The environment for the pipeline (e.g., Testing, Production)
+    Default: Testing
+    Description: The environment for the pipeline
   GitBranch:
     Type: String
+    Default: main
     Description: The GitHub branch to deploy from
   FullRepositoryId:
     Type: String
-    Description: The full repository ID (e.g., username/repository)
+    Default: Detectronic-JB/Test-Data-Visualizer
+    Description: The full repository ID
   CodeStarConnectionArn:
     Type: String
+    Default: arn:aws:codeconnections:eu-west-1:583261726886:connection/561ae0bc-b2c3-45f3-adb0-dee3386746e4
     Description: The ARN for the CodeStar Connection
   UniqueID:
     Type: String
@@ -129,7 +133,7 @@ Resources:
                 Category: Source
                 Owner: AWS
                 Provider: CodeStarSourceConnection
-                Version: 1  # Make sure to use the correct version
+                Version: 1
               Configuration:
                 ConnectionArn: !Ref CodeStarConnectionArn
                 FullRepositoryId: !Ref FullRepositoryId
@@ -160,4 +164,3 @@ Outputs:
   PipelineName:
     Description: Name of the pipeline created
     Value: !Sub "${UniqueID}-pipeline-${Environment}"
-
