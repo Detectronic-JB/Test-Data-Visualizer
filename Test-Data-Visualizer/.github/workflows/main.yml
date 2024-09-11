@@ -1,33 +1,7 @@
-name: Deploy to AWS - Testing Environment
-
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Set up Node.js environment
-        uses: actions/setup-node@v2
-        with:
-          node-version: '14'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Set up AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-west-1
-
-      - name: Deploy to AWS (Testing Environment)
-        run: |
-          sam build
-          sam deploy --template-file template.yaml --stack-name test-data-visualizer --capabilities CAPABILITY_IAM
+- name: Deploy to AWS
+  run: |
+    sam build --template-file pipeline-template.yml
+    sam deploy --template-file pipeline-template.yml \
+      --stack-name test-data-visualizer-pipeline \
+      --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+      --no-fail-on-empty-changeset
