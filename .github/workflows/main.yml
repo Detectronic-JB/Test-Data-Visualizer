@@ -28,11 +28,6 @@ jobs:
           pip install aws-sam-cli
       - name: Deploy to AWS (Testing Environment)
         run: |
-          pwd
-          ls -la
-          echo "Contents of parent directory:"
-          ls -la ..
-          echo "Contents of Test-Data-Visualizer directory:"
-          ls -la Test-Data-Visualizer || echo "Directory not found"
-          sam build --template-file ./template.yml
-          sam deploy --template-file ./template.yml --stack-name test-data-visualizer-test --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --no-fail-on-empty-changeset
+          cd Test-Data-Visualizer
+          sam build --template-file template.yml
+          sam deploy --template-file template.yml --stack-name test-data-visualizer-test --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --no-fail-on-empty-changeset
