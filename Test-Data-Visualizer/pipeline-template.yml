@@ -1,0 +1,274 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  This template deploys a testing CodePipeline with its required resources for a testing environment, including App Runner and ECR access.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: "Testing"
+  
+  GitBranch:
+    Type: String
+    Default: "main"
+  
+  FullRepositoryId:
+    Type: String
+    Default: "my-app-repo"
+
+  CodeStarConnectionArn:
+    Type: String
+    Default: "arn:aws:codeconnections:eu-west-1:583261726886:connection/7fba6c00-7d2d-4878-8ac6-13f47013dfa7"
+
+  EcrImageTag:
+    Type: String
+    Default: "latest"
+
+  VPCId:
+    Type: String
+    Default: "vpc-0ca52eb6b0f7d03a3"
+
+  PrivateSubnet1:
+    Type: String
+    Default: "subnet-00c4e4fea393215aa"
+
+  PrivateSubnet2:
+    Type: String
+    Default: "subnet-083d121cdc5bc5e0c"
+
+  RdsInstanceArn:
+    Type: String
+    Default: "arn:aws:rds:eu-west-1:583261726886:db:datavis-testing"
+
+  RdsSecurityGroupId:
+    Type: String
+    Default: "sg-06d609bba3d27ff89"
+
+  SecretKeySecretArn:
+    Type: String
+    Default: "arn:aws:secretsmanager:eu-west-1:583261726886:secret:DataVisualizer/Secret-Test-iTBotZ"
+
+Resources:
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref FullRepositoryId
+      ImageScanningConfiguration:
+        scanOnPush: true
+
+  PipelineArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: "data-visualizer-test-pipeline-artifacts"
+      VersioningConfiguration:
+        Status: Enabled
+      LoggingConfiguration:
+        DestinationBucketName: !Ref PipelineArtifactsLoggingBucket
+        LogFilePrefix: "artifacts-logs"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  PipelineArtifactsLoggingBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: "data-visualizer-test-pipeline-logs"
+      VersioningConfiguration:
+        Status: Enabled
+
+  PipelineArtifactsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref PipelineArtifactsBucket
+      PolicyDocument:
+        Statement:
+          - Effect: "Deny"
+            Action: "s3:*"
+            Principal: "*"
+            Resource:
+              - !Sub "${PipelineArtifactsBucket.Arn}/*"
+              - !GetAtt PipelineArtifactsBucket.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: "DataVisualizerTest-CodeBuildServiceRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                - codebuild.amazonaws.com
+            Action: "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: "DataVisualizerTest-CodeBuildAccessPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+              - Effect: Allow
+                Action: 
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                Resource: "*"
+              - Effect: Allow
+                Action: 
+                  - "ec2:CreateNetworkInterface"
+                  - "ec2:DescribeNetworkInterfaces"
+                  - "ec2:DeleteNetworkInterface"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "ecr:GetDownloadUrlForLayer"
+                  - "ecr:BatchGetImage"
+                  - "ecr:GetAuthorizationToken"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "ecr:PutImage"
+                  - "ecr:CompleteLayerUpload"
+                  - "ecr:UploadLayerPart"
+                  - "ecr:InitiateLayerUpload"
+                Resource: "*"
+
+  CodeBuildProjectBuildAndPush:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: "DataVisualizerTest-CodeBuildBuildAndPush"
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        Type: LINUX_CONTAINER
+        PrivilegedMode: true  # Required for Docker build
+        EnvironmentVariables:
+          - Name: REPOSITORY_URI
+            Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}"
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            pre_build:
+              commands:
+                - echo Logging in to Amazon ECR...
+                - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
+            build:
+              commands:
+                - echo Build started on `date`
+                - echo Building the Docker image...
+                - docker build -t $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION .
+                - docker tag $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION $REPOSITORY_URI:latest
+            post_build:
+              commands:
+                - echo Pushing the Docker image...
+                - docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
+                - docker push $REPOSITORY_URI:latest
+                - echo Build completed on `date`
+          artifacts:
+            files:
+              - '**/*'
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+
+  CodeBuildProjectPrepareCloudFormation:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: "DataVisualizerTest-PrepareCloudFormation"
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        Type: LINUX_CONTAINER
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            build:
+              commands:
+                - echo Preparing CloudFormation templates...
+          artifacts:
+            files:
+              - '**/*'
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location: !Ref PipelineArtifactsBucket
+        Type: S3
+      RoleArn: arn:aws:iam::583261726886:role/Data-Visualiser-Test-Role
+      RestartExecutionOnUpdate: true
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceCodeRepo
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: "1"
+              Configuration:
+                ConnectionArn: !Ref CodeStarConnectionArn
+                FullRepositoryId: !Ref FullRepositoryId
+                BranchName: !Ref GitBranch
+              OutputArtifacts:
+                - Name: SourceCodeAsZip
+              RunOrder: 1
+        
+        - Name: BuildAndDeploy
+          Actions:
+            - Name: BuildContainerImage
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              InputArtifacts:
+                - Name: SourceCodeAsZip
+              Configuration:
+                ProjectName: !Ref CodeBuildProjectBuildAndPush
+              RunOrder: 1
+            - Name: PrepareCloudFormation
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: "1"
+                Provider: CodeBuild
+              InputArtifacts:
+                - Name: SourceCodeAsZip
+              OutputArtifacts:
+                - Name: AppRunnerCloudFormation
+              Configuration:
+                ProjectName: !Ref CodeBuildProjectPrepareCloudFormation
+              RunOrder: 2
+
+        - Name: AppRunnerDeploy
+          Actions:
+            - Name: Deploy
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: "1"
+                Provider: CloudFormation
+              InputArtifacts:
+                - Name: AppRunnerCloudFormation
+              Configuration:
+                ActionMode: REPLACE_ON_FAILURE
+                RoleArn: arn:aws:iam::583261726886:role/Data-Visualiser-Test-Role
+                StackName: !Sub "${AWS::StackName}-AppRunnerService"
+                TemplatePath: AppRunnerCloudFormation::template.yml
+              RunOrder: 1
