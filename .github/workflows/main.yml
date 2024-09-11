@@ -10,23 +10,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      
-      - name: Set up AWS CLI
+
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-1
+          role-to-assume: arn:aws:iam::583261726886:role/CloudFormation-DataVisualizerPipeline-Role
+          role-duration-seconds: 1200
 
       - name: Deploy to AWS
         run: |
           cd Test-Data-Visualizer
-          
+
           # Function to check the status of the CloudFormation stack
           check_stack_status() {
             aws cloudformation describe-stacks --stack-name "test-data-visualizer-pipeline" --query "Stacks[0].StackStatus" --output text 2>/dev/null || echo "STACK_NOT_FOUND"
           }
-          
+
           # Function to handle stack deletion
           delete_stack() {
             echo "Stack exists in a failed state. Deleting stack..."
@@ -35,25 +37,25 @@ jobs:
             aws cloudformation wait stack-delete-complete --stack-name "test-data-visualizer-pipeline"
             echo "Stack deleted successfully"
           }
-          
+
           # Check initial stack status
           STACK_STATUS=$(check_stack_status)
           echo "Initial stack status: $STACK_STATUS"
-          
+
           # If stack exists and is in a failed or incomplete state, delete it
           if [[ "$STACK_STATUS" != "STACK_NOT_FOUND" && "$STACK_STATUS" != "CREATE_COMPLETE" && "$STACK_STATUS" != "UPDATE_COMPLETE" ]]; then
             delete_stack
           else
             echo "Stack does not exist or is in a good state, proceeding with deployment."
           fi
-          
+
           # Start building the SAM application
           echo "Building SAM application..."
           if ! sam build --template-file template.yml; then
             echo "SAM build failed."
             exit 1
           fi
-          
+
           # Deploy the SAM application
           echo "Deploying SAM application..."
           if ! sam deploy --template-file template.yml \
@@ -66,15 +68,15 @@ jobs:
             aws cloudformation describe-stack-events --stack-name "test-data-visualizer-pipeline" --query "StackEvents[?ResourceStatus=='CREATE_FAILED'].{LogicalResourceId:LogicalResourceId,ResourceStatusReason:ResourceStatusReason}"
             exit 1
           fi
-          
+
           # Check final stack status after deployment
           FINAL_STATUS=$(check_stack_status)
           echo "Final stack status: $FINAL_STATUS"
-          
+
           # Validate final stack status
           if [[ "$FINAL_STATUS" != "CREATE_COMPLETE" && "$FINAL_STATUS" != "UPDATE_COMPLETE" ]]; then
             echo "Deployment failed. Investigate CloudFormation events for more details."
             exit 1
           fi
-          
+
           echo "Deployment completed successfully."
