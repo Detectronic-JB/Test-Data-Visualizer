@@ -5,17 +5,18 @@ phases:
     commands:
       - echo Logging in to Amazon ECR...
       - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
+      - REPOSITORY_URI_LOWERCASE=$(echo $REPOSITORY_URI | tr '[:upper:]' '[:lower:]')
   build:
     commands:
       - echo Build started on `date`
       - echo Building the Docker image...
-      - docker build -t $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION .
-      - docker tag $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION $REPOSITORY_URI:latest
+      - docker build -t $REPOSITORY_URI_LOWERCASE:$CODEBUILD_RESOLVED_SOURCE_VERSION .
+      - docker tag $REPOSITORY_URI_LOWERCASE:$CODEBUILD_RESOLVED_SOURCE_VERSION $REPOSITORY_URI_LOWERCASE:latest
   post_build:
     commands:
       - echo Pushing the Docker image...
-      - docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
-      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI_LOWERCASE:$CODEBUILD_RESOLVED_SOURCE_VERSION
+      - docker push $REPOSITORY_URI_LOWERCASE:latest
       - echo Build completed on `date`
 
 artifacts:
