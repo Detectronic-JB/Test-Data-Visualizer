@@ -1,6 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'This template sets up a testing pipeline using AWS CodePipeline, CodeBuild,
-  and S3 for a testing environment.'
+Description: 'This template sets up a testing pipeline using AWS CodePipeline, CodeBuild, and S3 for a testing environment.'
 
 Parameters:
   Environment:
@@ -14,7 +13,7 @@ Parameters:
     Default: Detectronic-JB/Test-Data-Visualizer
   CodeStarConnectionArn:
     Type: String
-    Default: arn:aws:codeconnections:eu-west-1:583261726886:connection/e525dc8c-cd78-462c-b13f-8ed60baa280a
+    Default: arn:aws:codeconnections:eu-west-1:583261726886:connection/3db06b73-3b2c-4e00-89be-c8040fccfd57
 
 Resources:
   PipelineArtifactsBucket:
@@ -24,8 +23,6 @@ Resources:
         Fn::Sub: data-visualizer-test-pipeline-artifacts-${AWS::AccountId}
       VersioningConfiguration:
         Status: Enabled
-    Metadata:
-      SamResourceId: PipelineArtifactsBucket
 
   CodeBuildServiceRole:
     Type: AWS::IAM::Role
@@ -35,31 +32,29 @@ Resources:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-        - Effect: Allow
-          Principal:
-            Service: codebuild.amazonaws.com
-          Action: sts:AssumeRole
-      Policies:
-      - PolicyName: CodeBuildPolicy
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
           - Effect: Allow
-            Action:
-            - logs:CreateLogGroup
-            - logs:CreateLogStream
-            - logs:PutLogEvents
-            - s3:GetObject
-            - s3:PutObject
-            - s3:GetObjectVersion
-            - ecr:GetAuthorizationToken
-            - ecr:BatchCheckLayerAvailability
-            - ecr:GetDownloadUrlForLayer
-            - ecr:BatchGetImage
-            - ecr:PutImage
-            Resource: '*'
-    Metadata:
-      SamResourceId: CodeBuildServiceRole
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:GetObjectVersion
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:PutImage
+                Resource: '*'
 
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
@@ -73,27 +68,35 @@ Resources:
         Image: aws/codebuild/standard:5.0
         Type: LINUX_CONTAINER
         EnvironmentVariables:
-        - Name: REPOSITORY_URI
-          Value:
-            Fn::Sub: ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}
+          - Name: REPOSITORY_URI
+            Value:
+              Fn::Sub: ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FullRepositoryId}
       Source:
         Type: CODEPIPELINE
-        BuildSpec: "version: 0.2\nphases:\n  pre_build:\n    commands:\n      - echo\
-          \ \"Logging in to Amazon ECR...\"\n      - aws ecr get-login-password --region\
-          \ $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI\n\
-          \  build:\n    commands:\n      - echo \"Building the Docker image...\"\n\
-          \      - docker build -t $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION\
-          \ .\n      - docker tag $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION\
-          \ $REPOSITORY_URI:latest\n  post_build:\n    commands:\n      - echo \"\
-          Pushing the Docker image...\"\n      - docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION\n\
-          \      - docker push $REPOSITORY_URI:latest\nartifacts:\n  files:\n    -\
-          \ '**/*'\n"
+        BuildSpec: |
+          version: 0.2
+          phases:
+            pre_build:
+              commands:
+                - echo "Logging in to Amazon ECR..."
+                - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
+            build:
+              commands:
+                - echo "Building the Docker image..."
+                - docker build -t $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION .
+                - docker tag $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION $REPOSITORY_URI:latest
+            post_build:
+              commands:
+                - echo "Pushing the Docker image..."
+                - docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
+                - docker push $REPOSITORY_URI:latest
+          artifacts:
+            files:
+              - '**/*'
       ServiceRole:
         Fn::GetAtt:
         - CodeBuildServiceRole
         - Arn
-    Metadata:
-      SamResourceId: CodeBuildProject
 
   CodePipelineRole:
     Type: AWS::IAM::Role
@@ -103,23 +106,21 @@ Resources:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-        - Effect: Allow
-          Principal:
-            Service: codepipeline.amazonaws.com
-          Action: sts:AssumeRole
-      Policies:
-      - PolicyName: CodePipelinePolicy
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
           - Effect: Allow
-            Action:
-            - s3:*
-            - codebuild:*
-            - codestar-connections:UseConnection
-            Resource: '*'
-    Metadata:
-      SamResourceId: CodePipelineRole
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodePipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                  - codebuild:*
+                  - codestar-connections:UseConnection
+                Resource: '*'
 
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
@@ -140,7 +141,7 @@ Resources:
             Category: Source
             Owner: AWS
             Provider: CodeStarSourceConnection
-            Version: '2'  # Changed to Version 2 for GitHub Apps
+            Version: '2'
           Configuration:
             ConnectionArn:
               Ref: CodeStarConnectionArn
@@ -165,8 +166,6 @@ Resources:
             ProjectName:
               Ref: CodeBuildProject
           RunOrder: 1
-    Metadata:
-      SamResourceId: Pipeline
 
 Outputs:
   PipelineId:
